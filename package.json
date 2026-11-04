@@ -1,0 +1,12 @@
+{
+  "name": "sprinto-outreach",
+  "private": true,
+  "description": "Automated cold outreach pipeline for Sprinto",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node run.js review",
+    "test": "node --test test/"
+  }
+}

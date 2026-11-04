@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sprinto Outreach Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Colors and font taken from sprinto.com: plum, orange and warm off-white. */
+  :root { --plum:#650a41; --orange:#fd8c25; --hot:#b84f0a; --hot-tint:#fdf0e4; --hot-line:#f6cfa9; --glow:#fbe6d3; --band:#3d0627; --bg:#f6f5f2; --card:#fff; --text:#292226; --muted:#50454c; --line:#e4e1db; --accent:#650a41; --accent-hover:#4d0731; --on-accent:#fff; --tint:#f7ecf2; --good:#1c7c4a; --good-tint:#e7f3ec; --bad:#b3362b; --warn:#a55130; }
+  @media (prefers-color-scheme: dark) { :root { --hot:#fdb169; --hot-tint:#3a2a22; --hot-line:#6b4a30; --glow:#33232b; --band:#4a0a30; --bg:#1c1518; --card:#292226; --text:#f6f5f2; --muted:#b8adb3; --line:#43383e; --accent:#f0a8d0; --accent-hover:#f7c6e1; --on-accent:#292226; --tint:#3a2a32; --good:#5cc08d; --good-tint:#1f3329; --bad:#ec7f74; --warn:#fdb169; } }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html { scroll-behavior:smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
+  body { margin:0; background:radial-gradient(ellipse 700px 260px at 50% 60px, var(--glow), transparent) no-repeat, var(--bg); color:var(--text); font:15px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .topbar { background:var(--card); border-top:3px solid; border-image:linear-gradient(90deg, var(--plum), var(--orange)) 1; border-bottom-width:0; box-shadow:0 1px 0 var(--line); }
+  .topbar-inner { max-width:1040px; margin:0 auto; padding:14px 16px; display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; justify-content:space-between; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  .wordmark { font-size:21px; font-weight:700; letter-spacing:-.02em; color:var(--accent); }
+  .tagline { color:var(--muted); padding-left:12px; border-left:1px solid var(--line); }
+  .topbar nav { display:flex; gap:20px; }
+  .topbar nav a { color:var(--text); text-decoration:none; font-weight:500; }
+  .topbar nav a:hover { color:var(--hot); }
+  .hero { text-align:center; max-width:800px; margin:0 auto; padding:36px 0 8px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:4px 14px; font-size:13px; font-weight:500; color:var(--hot); background:var(--hot-tint); border:1px solid var(--hot-line); border-radius:16px; overflow-wrap:anywhere; }
+  .eyebrow svg { flex:none; }
+  .eyebrow:empty { display:none; }
+  .hero h1 { font-size:clamp(32px, 6vw, 54px); line-height:1.1; font-weight:700; letter-spacing:-.025em; margin:18px 0 14px; }
+  .hero h1 em { font-style:normal; color:var(--hot); }
+  .hero p.lead { font-size:clamp(16px, 2.2vw, 19px); color:var(--muted); margin:0 auto; max-width:660px; }
+  .steps { list-style:none; display:flex; max-width:720px; margin:28px auto 8px; padding:0; }
+  .steps li { position:relative; flex:1 1 0; min-width:0; padding-top:20px; text-align:center; font-size:12px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .steps li::before { content:""; position:absolute; top:3px; left:50%; width:11px; height:11px; margin-left:-5.5px; border:2px solid var(--muted); border-radius:50%; background:var(--bg); z-index:1; }
+  .steps li:not(:last-child)::after { content:""; position:absolute; top:8px; left:50%; width:100%; height:1px; background:linear-gradient(90deg, var(--accent), var(--orange)); }
+  @media (max-width:560px) { .steps li { font-size:10px; letter-spacing:0; } }
+  .steps li:first-child::before { border-color:var(--accent); }
+  .steps li:last-child::before { border-color:var(--orange); }
+  .action-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-top:24px; }
+  .action-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; align-items:flex-start; }
+  .icon-box { width:44px; height:44px; border-radius:10px; display:grid; place-items:center; color:#fff; margin-bottom:16px; }
+  .icon-box.orange { background:#e8701a; }
+  .icon-box.plum { background:var(--plum); }
+  .action-card h2 { margin:0 0 4px; color:var(--text); font-size:19px; }
+  .action-card p { margin:0 0 14px; color:var(--muted); flex:1; }
+  button.link { border:0; background:none; padding:0; color:var(--hot); font-weight:600; font-size:15px; }
+  button.link:hover:not(:disabled) { background:none; text-decoration:underline; }
+  button.link:disabled { color:var(--muted); opacity:.7; }
+  .band { margin-top:24px; padding:22px 24px; border-radius:16px; background:linear-gradient(100deg, var(--band), var(--plum)); color:#fff; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; }
+  .band strong { display:block; font-size:18px; font-weight:600; }
+  .band span { color:#f0dce7; font-size:14px; }
+  .band a { flex:none; padding:9px 20px; border-radius:100px; background:var(--orange); color:#2a1405; font-weight:600; text-decoration:none; }
+  .band a:hover { background:#ffa04d; }
+  .tabs { display:flex; gap:4px; margin-top:32px; border-bottom:1px solid var(--line); scroll-margin-top:16px; }
+  button.tab { flex:0 1 auto; padding:10px 16px; border:0; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; background:none; color:var(--muted); font-size:16px; font-weight:600; margin-bottom:-1px; white-space:nowrap; }
+  button.tab:hover:not(:disabled) { background:var(--tint); color:var(--accent); }
+  button.tab[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--orange); }
+  .count { display:inline-block; min-width:22px; padding:0 6px; border-radius:100px; background:var(--line); color:var(--text); font-size:12px; font-weight:600; text-align:center; }
+  button.tab[aria-selected="true"] .count { background:var(--accent); color:var(--on-accent); }
+  @media (max-width:560px) { button.tab { padding:10px; font-size:15px; } }
+  .tab-panel > p { margin:14px 0 0; }
+  .group-head { margin:20px 0 0; font-size:15px; color:var(--text); }
+  .group-title { display:flex; align-items:center; gap:8px; font-weight:600; font-size:16px; padding-bottom:10px; }
+  .empty { margin-top:12px; padding:32px 16px; text-align:center; color:var(--muted); border:1px dashed var(--line); border-radius:12px; }
+  .card-lead { margin:6px 0 0; color:var(--muted); }
+  .notice { margin-top:10px; padding:8px 12px; border-radius:8px; background:var(--hot-tint); color:var(--warn); }
+  .facts { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-top:14px; }
+  .fact { padding:10px 12px; border-radius:8px; background:var(--bg); min-width:0; }
+  .fact-label { font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
+  .fact-value { font-weight:600; overflow-wrap:anywhere; }
+  .fold { margin-top:10px; }
+  .fold > summary { font-weight:500; }
+  .card > .fold { padding-top:10px; border-top:1px solid var(--line); }
+  .card-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .card > .card-actions { padding-top:14px; border-top:1px solid var(--line); }
+  button.sm { padding:4px 12px; font-size:13px; }
+  .list-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:4px 16px; align-items:start; padding:12px 0; border-top:1px solid var(--line); }
+  .list-row > .fold { grid-column:1 / -1; margin-top:2px; }
+  .list-actions { display:flex; flex-wrap:wrap; gap:6px; }
+  @media (max-width:640px) { .list-row { grid-template-columns:minmax(0, 1fr); } .list-row > .small { justify-self:start; } }
+  table.evidence { table-layout:fixed; }
+  table.evidence thead th { font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); border-top:0; }
+  table.evidence thead th:nth-child(1) { width:26%; }
+  table.evidence thead th:nth-child(2) { width:24%; }
+  table.evidence th, table.evidence td { padding:8px 12px 8px 0; white-space:normal; overflow-wrap:anywhere; }
+  @media (max-width:640px) {
+    table.evidence thead { display:none; }
+    table.evidence tr { display:block; padding:8px 0; border-top:1px solid var(--line); }
+    table.evidence tbody th, table.evidence td { display:block; padding:0; border:0; }
+  }
+  .tried { margin-top:10px; }
+  .tried ul { margin:2px 0 0; padding-left:18px; }
+  .tried li { overflow-wrap:anywhere; }
+  .email-layout { display:grid; grid-template-columns:minmax(0, 3fr) minmax(0, 2fr); gap:20px; margin-top:4px; }
+  @media (max-width:760px) { .email-layout { grid-template-columns:minmax(0, 1fr); } }
+  .email-layout textarea { min-height:300px; }
+  .email-side { margin-top:10px; padding:4px 14px 14px; border-radius:12px; background:var(--bg); align-self:start; }
+  .side-block { margin-top:12px; }
+  .side-block ul { margin:4px 0 0; padding-left:18px; font-size:14px; }
+  .side-block li + li { margin-top:6px; }
+  .redraft { display:flex; gap:8px; margin-top:10px; }
+  .redraft button { flex:none; }
+  .poc-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; margin-top:10px; }
+  .sent-email { margin-top:8px; padding:12px 14px; border-radius:8px; background:var(--bg); }
+  .sent-email strong { display:block; margin:4px 0 8px; }
+  .sent-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; }  main { max-width:1040px; margin:0 auto; padding:0 16px 64px; }
+  h1 { font-size:26px; font-weight:600; margin:0 0 4px; }
+  h2 { font-size:20px; font-weight:600; margin:36px 0 4px; color:var(--accent); }
+  h3 { font-size:16px; font-weight:600; margin:0; overflow-wrap:anywhere; }
+  .muted { color:var(--muted); }
+  .small { font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .spread { justify-content:space-between; }
+  .status:empty { display:none; }
+  button { font:inherit; font-weight:500; padding:7px 16px; border:1px solid var(--accent); border-radius:100px; background:var(--card); color:var(--accent); cursor:pointer; }
+  button:hover:not(:disabled) { background:var(--tint); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  button.primary:hover:not(:disabled) { background:var(--accent-hover); border-color:var(--accent-hover); }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline:2px solid var(--orange); outline-offset:2px; }
+  input, textarea { font:inherit; width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+  textarea { min-height:190px; resize:vertical; }
+  label { display:block; font-size:13px; color:var(--muted); margin-top:10px; }
+  .badge { font-size:13px; font-weight:600; padding:2px 10px; border-radius:100px; }
+  .badge.qualify { background:var(--good-tint); }
+  .qualify, .sent { color:var(--good); } .reject { color:var(--bad); } .flag { color:var(--warn); }
+  .table-wrap { overflow-x:auto; margin-top:10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:6px 8px 6px 0; border-top:1px solid var(--line); }
+  th { font-weight:600; white-space:nowrap; }
+  a { color:var(--accent); overflow-wrap:anywhere; }
+  .status { position:sticky; top:8px; width:fit-content; max-width:100%; margin:12px auto 0; padding:4px 14px; background:var(--card); border:1px solid var(--line); border-radius:16px; z-index:2; }  summary { cursor:pointer; color:var(--muted); font-size:13px; }</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="wordmark">Sprinto</span>
+      <span class="tagline">Outreach review</span>
+    </div>
+    <nav aria-label="Sections">
+      <a href="#qualified">Qualified</a>
+      <a href="#emails">Emails</a>
+      <a href="#rejected">Rejected</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="status small" id="status" role="status"></div>
+
+  <div class="hero">
+    <span class="eyebrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.500-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span id="sendNote"></span></span>
+    <h1>Reach the right SaaS teams <em>with a real reason to talk.</em></h1>
+    <p class="lead">Every company is checked against Sprinto's ICP. Each answer comes with its source, and nothing sends until you approve it.</p>
+    <ol class="steps" aria-label="How it works">
+      <li>Shortlist</li>
+      <li>Research</li>
+      <li>Qualify</li>
+      <li>Find PoC</li>
+      <li>Draft</li>
+      <li>Send</li>
+    </ol>
+  </div>
+
+  <div class="action-grid">
+    <div class="action-card">
+      <div class="icon-box orange"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg></div>
+      <h2>Find companies</h2>
+      <p>Search free sources for SaaS teams that may need a compliance audit soon.</p>
+      <button id="shortlistBtn" class="link">Find 10 companies &rarr;</button>
+    </div>
+    <div class="action-card">
+      <div class="icon-box plum"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></svg></div>
+      <h2>Research companies</h2>
+      <p id="shortlisted"></p>
+      <button id="researchBtn" class="link">Research shortlisted &rarr;</button>
+    </div>
+  </div>
+
+  <div class="band">
+    <div><strong id="bandTitle"></strong><span id="bandText"></span></div>
+    <a id="bandLink" hidden>Review now</a>
+  </div>
+
+  <div class="tabs" id="tabs" role="tablist" aria-label="Review stages">
+    <button class="tab" role="tab" id="tab-qualified" aria-controls="panel-qualified">Qualified <span class="count" id="count-qualified"></span></button>
+    <button class="tab" role="tab" id="tab-emails" aria-controls="panel-emails">Emails <span class="count" id="count-emails"></span></button>
+    <button class="tab" role="tab" id="tab-rejected" aria-controls="panel-rejected">Rejected <span class="count" id="count-rejected"></span></button>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" id="panel-qualified" aria-labelledby="tab-qualified">
+    <p class="small muted">Qualifying a company uses one Hunter search and writes its draft.</p>
+    <div id="qualified"></div>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" id="panel-emails" aria-labelledby="tab-emails" hidden>
+    <p class="small muted">Nothing sends until you approve it here.</p>
+    <div id="emails"></div>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" id="panel-rejected" aria-labelledby="tab-rejected" hidden>
+    <p class="small muted">These are recommendations, grouped by reason. You can overrule any of them.</p>
+    <div id="rejected"></div>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => {
+  const n = Object.assign(document.createElement(tag), props);
+  n.append(...kids.filter((k) => k !== null && k !== undefined));
+  return n;
+};
+const edits = {};
+let lastState = '';
+
+// Jobs run one at a time from this page, each made of short requests to the server.
+let queue = Promise.resolve();
+let busy = null;
+let queued = 0;
+let lastError = null;
+let waitingDomains = [];
+
+const ACTION_LABELS = {
+  decide: 'Saving your decision',
+  continueOutreach: 'Finding the PoC and drafting',
+  manualPoc: 'Drafting the email',
+  redraft: 'Redrafting the email',
+  rejectEmail: 'Rejecting the email',
+  send: 'Sending the email',
+};
+
+function showStatus() {
+  const line = busy ? `Working: ${busy}${queued ? ` (${queued} more queued)` : ''}. Keep this tab open.` : '';
+  $('status').textContent = line;
+  if (lastError) $('status').append(el('div', { className: 'reject', textContent: lastError }));
+}
+
+function enqueue(label, fn) {
+  queued++;
+  showStatus();
+  queue = queue.then(async () => {
+    queued--;
+    busy = label;
+    showStatus();
+    try {
+      await fn((msg) => { busy = msg; showStatus(); });
+      lastError = null;
+    } catch (e) {
+      lastError = `${label}: ${e.message}`;
+    }
+    busy = null;
+    showStatus();
+    await poll();
+  });
+  return queue;
+}
+
+async function call(action, args = {}) {
+  const res = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...args }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `The request failed (${res.status}).`);
+  return data;
+}
+
+const act = (action, args = {}) => enqueue(ACTION_LABELS[action] || 'Working', () => call(action, args));
+
+// One question per request. If this stops, research resumes from the same question.
+function researchOne(domain, restart) {
+  return enqueue(`Researching ${domain}`, async (progress) => {
+    if (restart) await call('researchMore', { domain });
+    let step;
+    do {
+      step = await call('researchStep', { domain });
+      if (!step.done) progress(`Researching ${domain}: ${step.next}`);
+      await poll();
+    } while (!step.done);
+  });
+}
+
+const button = (label, onclick, cls = '') => el('button', { textContent: label, onclick, className: cls });
+
+const ANSWER_LABELS = {
+  b2b_saas: 'B2B SaaS',
+  not_b2b_saas: 'Not B2B SaaS',
+  series_a_c: 'Series A to C',
+  bootstrapped: 'Bootstrapped',
+  too_early: 'Too early',
+  too_late: 'Too late',
+  holds_needed: 'Holds what it needs',
+  missing_framework: 'Missing a framework',
+  uses_competitor: 'Uses a competitor',
+  not_certified: 'Not certified',
+  regulated: 'Regulated',
+  not_regulated: 'Not regulated',
+  aws: 'AWS',
+  azure: 'Azure',
+  gcp: 'GCP',
+  other: 'Other',
+  yes: 'Yes',
+  no: 'No',
+  unknown: 'Unknown',
+};
+
+function answerText(d) {
+  const answer = String(d.answer);
+  if (answer === 'known') return String(d.value);
+  if (answer === String(d.value)) return answer;
+  const label = ANSWER_LABELS[answer] || answer;
+  return d.value ? `${label}: ${d.value}` : label;
+}
+
+// Stays open when the page refreshes its data.
+const openFolds = new Set();
+function fold(key, summary, ...kids) {
+  const box = el('details', { className: 'fold', open: openFolds.has(key) }, el('summary', { textContent: summary }), ...kids);
+  box.ontoggle = () => (box.open ? openFolds.add(key) : openFolds.delete(key));
+  return box;
+}
+
+function evidenceCell(d) {
+  if (!d.evidence) return el('span', { className: 'muted', textContent: 'No source found' });
+  if (d.evidence.kind === 'absence') return el('span', { className: 'muted', textContent: `Not mentioned on the pages checked (${d.evidence.checkedAt})` });
+  const quote = String(d.evidence.quote).replace(/[*#]+/g, '').trim();
+  const span = el('span', { textContent: `"${quote}"${d.evidence.sourceDate ? ` (dated ${d.evidence.sourceDate})` : ''} ` });
+  if (/^https?:\/\//.test(d.evidence.url)) span.append(el('a', { href: d.evidence.url, target: '_blank', rel: 'noopener noreferrer', textContent: d.evidence.kind === 'search' ? 'via search' : 'source' }));
+  else span.append(el('span', { className: 'muted', textContent: 'via search, no source link' }));
+  return span;
+}
+
+function answersTable(c) {
+  const rows = Object.values(c.details || {}).map((d) =>
+    el('tr', {}, el('th', { textContent: d.label, scope: 'row' }), el('td', { textContent: answerText(d) }), el('td', { className: 'small' }, evidenceCell(d))));
+  const head = el('thead', {}, el('tr', {}, ...['Question', 'Answer', 'Evidence'].map((t) => el('th', { textContent: t, scope: 'col' }))));
+  return el('div', { className: 'table-wrap' }, el('table', { className: 'evidence' }, head, el('tbody', {}, ...rows)));
+}
+
+function triedList(c) {
+  const groups = Object.values(c.details || {}).filter((d) => d.log.length).map((d) =>
+    el('div', { className: 'tried' }, el('strong', { className: 'small', textContent: d.label }),
+      el('ul', {}, ...d.log.map((l) => el('li', { className: 'small muted', textContent: `${l.source}: ${l.outcome}` })))));
+  return fold(`tried-${c.domain}`, `Sources tried (${c.tries} tries)`, ...groups);
+}
+
+function factTiles(c) {
+  const tiles = ['employees', 'funding', 'certified', 'preparing', 'clients'].map((k) => c.details && c.details[k]).filter(Boolean).map((d) =>
+    el('div', { className: 'fact' }, el('div', { className: 'fact-label', textContent: d.label }), el('div', { className: 'fact-value', textContent: answerText(d) })));
+  return el('div', { className: 'facts' }, ...tiles);
+}
+
+function title(c) {
+  return el('h3', {}, `${c.name} `, el('span', { className: 'muted small', textContent: c.domain }));
+}
+
+function companyCard(c) {
+  const flags = (c.recommendation.flags || []).map((f) => el('div', { className: 'notice small', textContent: f }));
+  return el('div', { className: 'card' },
+    el('div', { className: 'row spread' }, title(c), el('span', { className: 'badge qualify', textContent: 'Recommended: qualify' })),
+    el('p', { className: 'card-lead', textContent: c.recommendation.reason }),
+    ...flags,
+    factTiles(c),
+    fold(`answers-${c.domain}`, 'Evidence for each answer', answersTable(c)),
+    triedList(c),
+    el('div', { className: 'card-actions' },
+      button('Qualify', () => act('decide', { domain: c.domain, decision: 'approve' }), 'primary'),
+      button('Reject', () => act('decide', { domain: c.domain, decision: 'reject' })),
+      button('Research more', () => researchOne(c.domain, true))));
+}
+
+function rejectedRow(c) {
+  return el('div', { className: 'list-row' },
+    el('div', {}, title(c), el('div', { className: 'small reject', textContent: c.recommendation.reason })),
+    el('div', { className: 'list-actions' },
+      button('Overrule and approve', () => act('decide', { domain: c.domain, decision: 'approve' }), 'sm'),
+      button('Reject', () => act('decide', { domain: c.domain, decision: 'reject' }), 'sm'),
+      button('Research more', () => researchOne(c.domain, true), 'sm')),
+    fold(`answers-${c.domain}`, 'See answers', answersTable(c), triedList(c)));
+}
+
+function noPocCard(c) {
+  const f = el('input', { placeholder: 'First name' });
+  const l = el('input', { placeholder: 'Last name' });
+  const t = el('input', { placeholder: 'Job title' });
+  return el('div', { className: 'card' }, title(c),
+    el('div', { className: 'notice small', textContent: 'Hunter found nobody matching the contact table. You can look someone up in Apollo and enter them here.' }),
+    el('div', { className: 'poc-fields' }, f, l, t),
+    el('div', { className: 'card-actions' },
+      button('Draft email', () => act('manualPoc', { domain: c.domain, firstName: f.value, lastName: l.value, title: t.value }), 'primary'),
+      button('Reject', () => act('decide', { domain: c.domain, decision: 'reject' }))));
+}
+
+function emailCard(c) {
+  const e = c.email;
+  const edit = edits[c.domain] || (edits[c.domain] = { subject: e.subject, body: e.body, source: e.body });
+  if (edit.source !== e.body && !edit.dirty) Object.assign(edit, { subject: e.subject, body: e.body, source: e.body });
+  const subject = el('input', { id: `s-${c.domain}`, value: edit.subject, oninput: (ev) => { edit.subject = ev.target.value; edit.dirty = true; } });
+  const body = el('textarea', { id: `b-${c.domain}`, value: edit.body, oninput: (ev) => { edit.body = ev.target.value; edit.dirty = true; } });
+  const feedback = el('input', { placeholder: 'What should change? (optional)' });
+  const hookLink = /^https?:\/\//.test(e.hook_source_url) ? el('a', { href: e.hook_source_url, target: '_blank', rel: 'noopener noreferrer', textContent: 'source' }) : null;
+  const pains = el('ul', {}, ...e.pain_points.map((p) => el('li', {}, el('strong', { textContent: p.pain }), ` ${p.why}`)));
+  const block = (heading, ...kids) => el('div', { className: 'side-block' }, el('div', { className: 'fact-label', textContent: heading }), ...kids);
+  return el('div', { className: 'card' },
+    title(c),
+    ...(e.issues || []).map((i) => el('div', { className: 'notice small', textContent: `Check: ${i}` })),
+    el('div', { className: 'email-layout' },
+      el('div', {},
+        el('label', { htmlFor: `s-${c.domain}`, textContent: 'Subject' }), subject,
+        el('label', { htmlFor: `b-${c.domain}`, textContent: 'Email' }), body,
+        el('div', { className: 'card-actions' },
+          button('Approve and send', () => act('send', { domain: c.domain, subject: edit.subject, body: edit.body }), 'primary'),
+          button('Reject', () => act('rejectEmail', { domain: c.domain }))),
+        el('div', { className: 'redraft' }, feedback,
+          button('Redraft', () => { delete edits[c.domain]; act('redraft', { domain: c.domain, feedback: feedback.value }); }))),
+      el('aside', { className: 'email-side' },
+        block('Written for', el('div', {}, el('strong', { textContent: `${c.poc.firstName} ${c.poc.lastName}` }), `, ${c.poc.title}`),
+          el('div', { className: 'small muted', textContent: `${c.poc.reason} (${c.poc.source})` })),
+        block('Hook', el('div', {}, `${e.hook} `, hookLink)),
+        block('Pain points', pains),
+        block('Why this email', el('div', { className: 'small muted', textContent: e.why_this_email })))));
+}
+
+function finishedRow(c) {
+  const labels = { rejected: (c.recommendation && c.recommendation.reason) || 'Rejected', email_rejected: 'Email rejected by you', approved: 'Qualified: finding the PoC and drafting', poc_found: 'PoC found: drafting the email' };
+  const unfinished = ['approved', 'poc_found'].includes(c.status);
+  return el('div', { className: 'list-row' }, title(c),
+    el('div', { className: 'list-actions' },
+      el('span', { className: 'small muted', textContent: labels[c.status] }),
+      unfinished ? button('Continue', () => act('continueOutreach', { domain: c.domain }), 'sm') : null));
+}
+
+function sentRow(c) {
+  const e = c.email;
+  const who = c.poc ? `Written for ${c.poc.firstName} ${c.poc.lastName}, ${c.poc.title}` : '';
+  return el('div', { className: 'list-row' },
+    el('div', {}, title(c), el('div', { className: 'small muted', textContent: who })),
+    el('span', { className: 'small sent', textContent: e.sentAt ? `Sent ${e.sentAt.slice(0, 10)}` : 'Sent' }),
+    fold(`sent-${c.domain}`, 'View email',
+      el('div', { className: 'sent-email' },
+        el('div', { className: 'small muted', textContent: `Delivered to ${e.sentTo}` }),
+        el('strong', { textContent: e.subject }),
+        el('div', { className: 'sent-body', textContent: e.body }))));
+}
+
+function fill(id, nodes, empty) {
+  const box = $(id);
+  box.replaceChildren(...(nodes.length ? nodes : empty ? [el('div', { className: 'empty', textContent: empty })] : []));
+}
+
+const REASON_LABELS = {
+  already_certified: 'Already certified',
+  uses_competitor: 'Uses a competitor',
+  too_small: 'Too small',
+  too_large: 'Too large',
+  too_early: 'Too early',
+  too_late: 'Too late',
+  not_saas: 'Not B2B SaaS',
+  no_trigger: 'No audit or enterprise trigger',
+  insufficient_evidence: 'Not enough evidence',
+};
+
+const listGroup = (name, rows) => (rows.length ? [el('div', { className: 'card' }, el('div', { className: 'group-title' }, name, el('span', { className: 'count', textContent: rows.length })), ...rows)] : []);
+
+const TABS = ['qualified', 'emails', 'rejected'];
+
+function showTab(name, focus) {
+  for (const t of TABS) {
+    const on = t === name;
+    $(`tab-${t}`).setAttribute('aria-selected', on);
+    $(`tab-${t}`).tabIndex = on ? 0 : -1;
+    $(`panel-${t}`).hidden = !on;
+  }
+  if (focus) $(`tab-${name}`).focus();
+}
+
+const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : TABS[0]);
+
+function selectTab(name, focus) {
+  history.replaceState(null, '', `#${name}`);
+  showTab(name, focus);
+}
+
+function render(state) {
+  const all = Object.values(state.companies);
+  const by = (fn) => all.filter(fn);
+  const researched = by((c) => c.status === 'researched');
+  $('sendNote').textContent = `Every approved email goes only to ${state.emailTo}.`;
+  const shortlisted = by((c) => ['shortlisted', 'researching'].includes(c.status));
+  waitingDomains = shortlisted.map((c) => c.domain);
+  $('shortlisted').textContent = shortlisted.length ? `${shortlisted.length} waiting for research: ${shortlisted.map((c) => c.domain).join(', ')}` : 'Check shortlisted companies against the ICP. None are waiting right now.';
+  $('researchBtn').disabled = !shortlisted.length;
+  fill('qualified', researched.filter((c) => c.recommendation.verdict === 'qualify').map(companyCard), 'No qualified companies waiting for you.');
+
+  const rejects = researched.filter((c) => c.recommendation.verdict === 'reject');
+  const closed = by((c) => ['rejected', 'email_rejected'].includes(c.status));
+  const byReason = {};
+  for (const c of rejects) (byReason[c.recommendation.code] = byReason[c.recommendation.code] || []).push(c);
+  const reasonGroups = Object.entries(byReason).sort((a, b) => b[1].length - a[1].length)
+    .flatMap(([code, list]) => listGroup(REASON_LABELS[code] || code.replace(/_/g, ' '), list.map(rejectedRow)));
+  fill('rejected', [...reasonGroups, ...listGroup('Closed', closed.map(finishedRow))], 'No rejections yet.');
+
+  const toReviewCards = [...by((c) => c.status === 'no_poc').map(noPocCard), ...by((c) => c.status === 'drafted').map(emailCard)];
+  const inProgress = by((c) => ['approved', 'poc_found'].includes(c.status)).map(finishedRow);
+  const sent = by((c) => c.status === 'sent').map(sentRow);
+  fill('emails', [
+    ...(toReviewCards.length ? [el('h3', { className: 'group-head', textContent: `To review (${toReviewCards.length})` }), ...toReviewCards] : []),
+    ...listGroup('In progress', inProgress),
+    ...listGroup('Sent', sent),
+  ], 'No emails yet. Qualify a company to draft one.');
+
+  const toQualify = researched.filter((c) => c.recommendation.verdict === 'qualify').length;
+  const toReview = toReviewCards.length;
+  $('count-qualified').textContent = toQualify;
+  $('count-emails').textContent = toReview;
+  $('count-rejected').textContent = rejects.length + closed.length;
+  const waitingOnYou = toQualify + toReview;
+  $('bandTitle').textContent = waitingOnYou ? 'Waiting for you' : 'Nothing waiting for you';
+  $('bandText').textContent = [
+    toQualify && `${toQualify} ${toQualify === 1 ? 'company' : 'companies'} to qualify`,
+    toReview && `${toReview} ${toReview === 1 ? 'email' : 'emails'} to review`,
+    `${by((c) => c.status === 'sent').length} sent`,
+    `${rejects.length} recommended ${rejects.length === 1 ? 'rejection' : 'rejections'}`,
+  ].filter(Boolean).join(', ');
+  $('bandLink').hidden = !waitingOnYou;
+  $('bandLink').href = toQualify ? '#qualified' : '#emails';
+}
+
+async function poll() {
+  let res;
+  try {
+    res = await fetch('/api/state');
+  } catch {
+    lastError = 'Could not reach the server.';
+    showStatus();
+    return;
+  }
+  const state = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    lastError = state.error || `Could not load the data (${res.status}).`;
+    showStatus();
+    return;
+  }
+  const snapshot = JSON.stringify(state.companies);
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+  if (snapshot !== lastState && !typing) {
+    lastState = snapshot;
+    render(state);
+  }
+}
+
+$('shortlistBtn').onclick = () => enqueue('Building the shortlist', () => call('shortlist', { limit: 10 }));
+$('researchBtn').onclick = () => waitingDomains.forEach((domain) => researchOne(domain));
+window.addEventListener('beforeunload', (e) => {
+  if (busy || queued) e.preventDefault();
+});
+TABS.forEach((t, i) => {
+  $(`tab-${t}`).onclick = () => selectTab(t);
+  $(`tab-${t}`).onkeydown = (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (step) selectTab(TABS[(i + step + TABS.length) % TABS.length], true);
+  };
+});
+window.addEventListener('hashchange', () => {
+  showTab(tabFromHash());
+  $('tabs').scrollIntoView();
+});
+showTab(tabFromHash());
+poll();
+// The page refreshes itself after every action, so this only picks up other devices.
+setInterval(() => {
+  if (!document.hidden) poll();
+}, 15000);
+</script>
+</body>
+</html>
