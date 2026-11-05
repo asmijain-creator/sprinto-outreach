@@ -37,6 +37,6 @@ Other commands: `node run.js shortlist 10`, `node run.js add a.com b.io`, `node 
 | `config/icp.js` | The ICP: every qualifier, its sources and its "sufficient when" rule |
 | `src/verdict.js` | The qualification decision, as plain code |
 | `src/shortlist.js`, `src/research.js`, `src/outreach.js` | Find companies, research them, find the PoC, draft and send |
-| `src/server.js` | The API |
+| `src/app.js` | The API |
 | `api/` | One Vercel function per API route |
 | `public/index.html` | The review page |

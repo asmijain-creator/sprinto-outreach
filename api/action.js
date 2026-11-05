@@ -1,1 +1,1 @@
-module.exports = require('../src/server').route('action');
+module.exports = require('../src/app').route('action');

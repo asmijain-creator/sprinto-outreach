@@ -8,7 +8,7 @@ const { env, loadCompanies, loadCompany, saveCompany } = require('./src/lib');
 const { buildShortlist, addDomains } = require('./src/shortlist');
 const { researchCompany } = require('./src/research');
 const { findPoc, draftEmail, sendEmail } = require('./src/outreach');
-const { start } = require('./src/server');
+const { start } = require('./src/app');
 
 const log = (msg) => console.log(msg);
 const WAITING = ['shortlisted', 'researching'];

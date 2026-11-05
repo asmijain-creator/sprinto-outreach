@@ -35,7 +35,7 @@ test.before(async () => {
   process.env.SUPABASE_SECRET_KEY = 'test-secret';
   process.env.EMAIL_TO = 'me@example.com';
   lib = require('../src/lib');
-  const { route } = require('../src/server');
+  const { route } = require('../src/app');
   const routes = { '/api/state': route('state'), '/api/action': route('action') };
   app = http.createServer((req, res) => routes[req.url](req, res));
   await new Promise((r) => app.listen(0, '127.0.0.1', r));
