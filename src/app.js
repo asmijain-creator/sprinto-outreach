@@ -108,9 +108,15 @@ const handlers = {
     const result = await ACTIONS[action](args);
     json(res, 200, { ok: true, ...(action === 'researchStep' || action === 'shortlist' ? result : {}) });
   },
+  // Vercel calls this once a day, so Supabase's free plan doesn't pause the
+  // database for being unused. It reads one row and returns nothing from it.
+  keepalive: async (req, res) => {
+    await loadCompany('keepalive.invalid');
+    json(res, 200, { ok: true });
+  },
 };
 
-const METHODS = { state: 'GET', action: 'POST' };
+const METHODS = { state: 'GET', action: 'POST', keepalive: 'GET' };
 
 // One Vercel function per route, or one route on the local server.
 const route = (name) => async (req, res) => {

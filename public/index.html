@@ -23,10 +23,7 @@
   .topbar nav a { color:var(--text); text-decoration:none; font-weight:500; }
   .topbar nav a:hover { color:var(--hot); }
   .hero { text-align:center; max-width:800px; margin:0 auto; padding:36px 0 8px; }
-  .eyebrow { display:inline-flex; align-items:center; gap:8px; padding:4px 14px; font-size:13px; font-weight:500; color:var(--hot); background:var(--hot-tint); border:1px solid var(--hot-line); border-radius:16px; overflow-wrap:anywhere; }
-  .eyebrow svg { flex:none; }
-  .eyebrow:empty { display:none; }
-  .hero h1 { font-size:clamp(32px, 6vw, 54px); line-height:1.1; font-weight:700; letter-spacing:-.025em; margin:18px 0 14px; }
+  .hero h1 { font-size:clamp(32px, 6vw, 54px); line-height:1.1; font-weight:700; letter-spacing:-.025em; margin:0 0 14px; }
   .hero h1 em { font-style:normal; color:var(--hot); }
   .hero p.lead { font-size:clamp(16px, 2.2vw, 19px); color:var(--muted); margin:0 auto; max-width:660px; }
   .steps { list-style:none; display:flex; max-width:720px; margin:28px auto 8px; padding:0; }
@@ -150,7 +147,6 @@
   <div class="status small" id="status" role="status"></div>
 
   <div class="hero">
-    <span class="eyebrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.500-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span id="sendNote"></span></span>
     <h1>Reach the right SaaS teams <em>with a real reason to talk.</em></h1>
     <p class="lead">Every company is checked against Sprinto's ICP. Each answer comes with its source, and nothing sends until you approve it.</p>
     <ol class="steps" aria-label="How it works">
@@ -483,7 +479,6 @@ function render(state) {
   const all = Object.values(state.companies);
   const by = (fn) => all.filter(fn);
   const researched = by((c) => c.status === 'researched');
-  $('sendNote').textContent = `Every approved email goes only to ${state.emailTo}.`;
   const shortlisted = by((c) => ['shortlisted', 'researching'].includes(c.status));
   waitingDomains = shortlisted.map((c) => c.domain);
   $('shortlisted').textContent = shortlisted.length ? `${shortlisted.length} waiting for research: ${shortlisted.map((c) => c.domain).join(', ')}` : 'Check shortlisted companies against the ICP. None are waiting right now.';

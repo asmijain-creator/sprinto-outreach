@@ -36,7 +36,7 @@ test.before(async () => {
   process.env.EMAIL_TO = 'me@example.com';
   lib = require('../src/lib');
   const { route } = require('../src/app');
-  const routes = { '/api/state': route('state'), '/api/action': route('action') };
+  const routes = { '/api/state': route('state'), '/api/action': route('action'), '/api/keepalive': route('keepalive') };
   app = http.createServer((req, res) => routes[req.url](req, res));
   await new Promise((r) => app.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${app.address().port}`;
@@ -72,6 +72,15 @@ test('the page can read the data and run an action without logging in', async ()
 
   assert.strictEqual((await post({ action: 'decide', domain: 'acme.com', decision: 'reject' })).status, 200);
   assert.strictEqual((await lib.loadCompany('acme.com')).status, 'rejected');
+});
+
+test('the daily keep-awake request reads the database and returns no data', async () => {
+  const before = requests.length;
+  const res = await fetch(`${base}/api/keepalive`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), { ok: true });
+  assert.strictEqual(requests.length, before + 1);
+  assert.strictEqual(requests.at(-1).method, 'GET');
 });
 
 test('other sites cannot trigger actions from a browser', async () => {

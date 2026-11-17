@@ -28,6 +28,7 @@ Other commands: `node run.js shortlist 10`, `node run.js add a.com b.io`, `node 
 
 - **Saved data** lives in the Supabase `companies` table. Row level security with no policies means only the server's secret key can read it.
 - **Long jobs** run in steps. The page asks the server to answer one research question at a time, so no request runs long. Keep the tab open while a job runs. If it stops, press Research shortlisted to continue from the same question.
+- **Staying awake.** Supabase's free plan pauses databases that go unused. Vercel calls `/api/keepalive` once a day (`crons` in `vercel.json`) to read one row and prevent that. If the site ever shows "fetch failed", open the Supabase project and click Restore.
 - **There is no login.** Anyone with the link can see all the data, including contact names and emails, and can run every action, which uses your API credits and can send emails to `EMAIL_TO`. Share the link only with people you trust.
 
 ## The structure
