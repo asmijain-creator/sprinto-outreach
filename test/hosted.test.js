@@ -78,9 +78,8 @@ test('the daily keep-awake request reads the database and returns no data', asyn
   const before = requests.length;
   const res = await fetch(`${base}/api/keepalive`);
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { ok: true });
-  assert.strictEqual(requests.length, before + 1);
-  assert.strictEqual(requests.at(-1).method, 'GET');
+  assert.deepStrictEqual(await res.json(), { ok: true, escalated: 0 });
+  assert.ok(requests.slice(before).every((r) => r.method === 'GET'));
 });
 
 test('other sites cannot trigger actions from a browser', async () => {

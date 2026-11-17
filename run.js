@@ -9,6 +9,7 @@ const { buildShortlist, addDomains } = require('./src/shortlist');
 const { researchCompany } = require('./src/research');
 const { findPoc, draftEmail, sendEmail } = require('./src/outreach');
 const { start } = require('./src/app');
+const { startThread } = require('./src/agent');
 
 const log = (msg) => console.log(msg);
 const WAITING = ['shortlisted', 'researching'];
@@ -49,7 +50,7 @@ async function auto(domains) {
         log(`=> ${c.domain}: draft failed its checks, not sent: ${company.email.issues.join(' ')}`);
         continue;
       }
-      await sendEmail(company);
+      await saveCompany(startThread(await sendEmail(company)));
       log(`=> ${c.domain}: sent to ${env.EMAIL_TO}`);
     } catch (e) {
       log(`=> ${c.domain}: outreach failed: ${e.message}`);

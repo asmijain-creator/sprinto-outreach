@@ -25,16 +25,19 @@ const env = loadEnv();
 // data/companies.json. Vercel can't keep files, so there Supabase is required.
 const useSupabase = () => Boolean(env.SUPABASE_URL && env.SUPABASE_SECRET_KEY);
 
-async function supabase(query, options = {}) {
-  const res = await fetch(`${env.SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/companies${query}`, {
+// Errors carry the HTTP status, so the reply agent can tell a timeout from a refusal.
+async function db(table, query, options = {}) {
+  const res = await fetch(`${env.SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/${table}${query}`, {
     ...options,
     headers: { apikey: env.SUPABASE_SECRET_KEY, 'Content-Type': 'application/json', ...options.headers },
     signal: AbortSignal.timeout(20000),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`Supabase ${res.status}: ${text.slice(0, 200)}`);
+  if (!res.ok) throw Object.assign(new Error(`Supabase ${res.status}: ${text.slice(0, 200)}`), { status: res.status });
   return text ? JSON.parse(text) : null;
 }
+
+const supabase = (query, options) => db('companies', query, options);
 
 function loadFile() {
   if (env.VERCEL) throw new Error('Supabase is not set up. Add SUPABASE_URL and SUPABASE_SECRET_KEY in Vercel.');
@@ -247,4 +250,4 @@ async function fetchPage(url) {
   return { status: 'failed', url, reason };
 }
 
-module.exports = { ROOT, env, loadCompanies, loadCompany, saveCompany, gemini, GeminiError, GeminiUnusable, fetchPage, findPublishedDate, normalizeDomain, isPublicHttpUrl, sleep };
+module.exports = { ROOT, env, db, useSupabase, loadCompanies, loadCompany, saveCompany, gemini, GeminiError, GeminiUnusable, fetchPage, findPublishedDate, normalizeDomain, isPublicHttpUrl, sleep };

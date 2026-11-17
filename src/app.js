@@ -3,10 +3,11 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { ROOT, env, loadCompanies, loadCompany, saveCompany } = require('./lib');
+const { ROOT, env, db, useSupabase, loadCompanies, loadCompany, saveCompany } = require('./lib');
 const { buildShortlist } = require('./shortlist');
 const { researchStep, nextQuestion } = require('./research');
 const { findPoc, draftEmail, sendEmail } = require('./outreach');
+const { runAgent, checkSilence, handBack, startThread } = require('./agent');
 
 const PORT = Number(env.PORT || 3000);
 const HOSTED = Boolean(env.VERCEL);
@@ -59,9 +60,30 @@ const ACTIONS = {
   send: async ({ domain, subject, body }) => {
     if (!subject || !body) throw new Error('The email needs a subject and a body.');
     const company = await get(domain);
-    await sendEmail(await saveCompany({ ...company, email: { ...company.email, subject, body, status: 'approved' } }));
+    const sent = await sendEmail(await saveCompany({ ...company, email: { ...company.email, subject, body, status: 'approved' } }));
+    if (!sent.agent) await saveCompany(startThread(sent));
   },
+  // The prospect never receives the email, so you paste what they would reply.
+  agentReply: async ({ domain, reply }) => {
+    const text = String(reply || '').trim();
+    if (!text) throw new Error('Paste the reply first.');
+    if (text.length > 5000) throw new Error('The reply is too long.');
+    const company = await get(domain);
+    if (company.status !== 'sent') throw new Error('The reply agent starts once the cold email is sent.');
+    await runAgent(company, { trigger: 'reply', reply_text: text });
+  },
+  agentHandBack: async ({ domain, note }) => handBack(await get(domain), String(note || '').trim().slice(0, 500)),
 };
+
+// The reply agent's calendar and CRM, for the page. Empty when Supabase isn't set up.
+async function loadAgentRecords() {
+  if (!useSupabase()) return { meetings: [], crm: [] };
+  const [meetings, crm] = await Promise.all([
+    db('meetings', '?select=domain,starts_at,title&order=starts_at'),
+    db('crm_log', '?select=domain,event,details,created_at&order=created_at.desc&limit=100'),
+  ]);
+  return { meetings, crm };
+}
 
 const readBody = (req) =>
   new Promise((resolve, reject) => {
@@ -99,8 +121,8 @@ function sameOrigin(req) {
 
 const handlers = {
   state: async (req, res) => {
-    const companies = await loadCompanies();
-    json(res, 200, { companies, emailTo: env.EMAIL_TO, reviewMode: env.REVIEW_MODE !== 'false' });
+    const [companies, records] = await Promise.all([loadCompanies(), loadAgentRecords()]);
+    json(res, 200, { companies, ...records, emailTo: env.EMAIL_TO, reviewMode: env.REVIEW_MODE !== 'false' });
   },
   action: async (req, res) => {
     const { action, ...args } = await readBody(req);
@@ -108,11 +130,19 @@ const handlers = {
     const result = await ACTIONS[action](args);
     json(res, 200, { ok: true, ...(action === 'researchStep' || action === 'shortlist' ? result : {}) });
   },
-  // Vercel calls this once a day, so Supabase's free plan doesn't pause the
-  // database for being unused. It reads one row and returns nothing from it.
+  // Vercel calls this once a day. It keeps Supabase's free plan from pausing the
+  // database, and hands threads with no reply for 48 hours to a person.
   keepalive: async (req, res) => {
-    await loadCompany('keepalive.invalid');
-    json(res, 200, { ok: true });
+    const sent = Object.values(await loadCompanies()).filter((c) => c.status === 'sent');
+    let escalated = 0;
+    for (const company of sent) {
+      try {
+        if (await checkSilence(company)) escalated++;
+      } catch (e) {
+        console.error(`Silence check for ${company.domain}: ${e.message}`);
+      }
+    }
+    json(res, 200, { ok: true, escalated });
   },
 };
 

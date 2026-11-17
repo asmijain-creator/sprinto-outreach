@@ -155,9 +155,9 @@ async function draftEmail(company, feedback) {
 }
 
 // The recipient always comes from .env. Nothing here ever uses the PoC's address.
-async function sendEmail(company) {
+// Errors carry the HTTP status, so the reply agent can tell a timeout from a refusal.
+async function deliver(subject, text, idempotencyKey) {
   if (!env.EMAIL_TO) throw new Error('EMAIL_TO is not set in .env.');
-  if (company.email.status === 'sent') return company;
   const from = env.SENDER_NAME ? `${env.SENDER_NAME} <${env.EMAIL_FROM}>` : env.EMAIL_FROM;
   // Resend's test sender matches the account address exactly, including its case.
   const to = env.EMAIL_TO.toLowerCase();
@@ -166,18 +166,24 @@ async function sendEmail(company) {
     headers: {
       Authorization: `Bearer ${env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
-      'Idempotency-Key': `sprinto-${company.domain}-${to}-${company.email.subject}`.slice(0, 256),
+      'Idempotency-Key': `sprinto-${idempotencyKey}-${to}`.slice(0, 256),
     },
-    body: JSON.stringify({ from, to: [to], subject: company.email.subject, text: company.email.body }),
+    body: JSON.stringify({ from, to: [to], subject, text }),
     signal: AbortSignal.timeout(30000),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${data.message || 'no details'}`);
+  if (!res.ok) throw Object.assign(new Error(`Resend ${res.status}: ${data.message || 'no details'}`), { status: res.status });
+  return { id: data.id, to };
+}
+
+async function sendEmail(company) {
+  if (company.email.status === 'sent') return company;
+  const { id, to } = await deliver(company.email.subject, company.email.body, `${company.domain}-${company.email.subject}`);
   return saveCompany({
     ...company,
     status: 'sent',
-    email: { ...company.email, status: 'sent', resendId: data.id, sentTo: to, sentAt: new Date().toISOString() },
+    email: { ...company.email, status: 'sent', resendId: id, sentTo: to, sentAt: new Date().toISOString() },
   });
 }
 
-module.exports = { findPoc, pickContact, isFreshHook, draftEmail, checkDraft, sendEmail };
+module.exports = { findPoc, pickContact, isFreshHook, draftEmail, checkDraft, deliver, sendEmail };

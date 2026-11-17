@@ -54,7 +54,8 @@
   button.tab[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--orange); }
   .count { display:inline-block; min-width:22px; padding:0 6px; border-radius:100px; background:var(--line); color:var(--text); font-size:12px; font-weight:600; text-align:center; }
   button.tab[aria-selected="true"] .count { background:var(--accent); color:var(--on-accent); }
-  @media (max-width:560px) { button.tab { padding:10px; font-size:15px; } }
+  .tabs { overflow-x:auto; scrollbar-width:none; }
+  @media (max-width:560px) { button.tab { padding:10px 4px; font-size:13px; } .tabs { gap:0; justify-content:space-between; } .tabs .count { min-width:18px; padding:0 4px; } }
   .tab-panel > p { margin:14px 0 0; }
   .group-head { margin:20px 0 0; font-size:15px; color:var(--text); }
   .group-title { display:flex; align-items:center; gap:8px; font-weight:600; font-size:16px; padding-bottom:10px; }
@@ -100,7 +101,14 @@
   .poc-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; margin-top:10px; }
   .sent-email { margin-top:8px; padding:12px 14px; border-radius:8px; background:var(--bg); }
   .sent-email strong { display:block; margin:4px 0 8px; }
-  .sent-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; }  main { max-width:1040px; margin:0 auto; padding:0 16px 64px; }
+  .sent-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; }
+  .list-row .right { text-align:right; }
+  @media (max-width:640px) { .list-row .right { text-align:left; } }
+  .agent { margin-top:6px; padding:4px 14px 14px; border-radius:12px; background:var(--bg); }
+  .agent .fact { background:var(--card); }
+  .reply-box { min-height:90px; }
+  .timeline { margin:6px 0 0; padding-left:18px; }
+  .timeline li + li { margin-top:4px; }  main { max-width:1040px; margin:0 auto; padding:0 16px 64px; }
   h1 { font-size:26px; font-weight:600; margin:0 0 4px; }
   h2 { font-size:20px; font-weight:600; margin:36px 0 4px; color:var(--accent); }
   h3 { font-size:16px; font-weight:600; margin:0; overflow-wrap:anywhere; }
@@ -182,6 +190,7 @@
   <div class="tabs" id="tabs" role="tablist" aria-label="Review stages">
     <button class="tab" role="tab" id="tab-qualified" aria-controls="panel-qualified">Qualified <span class="count" id="count-qualified"></span></button>
     <button class="tab" role="tab" id="tab-emails" aria-controls="panel-emails">Emails <span class="count" id="count-emails"></span></button>
+    <button class="tab" role="tab" id="tab-meetings" aria-controls="panel-meetings">Meetings <span class="count" id="count-meetings"></span></button>
     <button class="tab" role="tab" id="tab-rejected" aria-controls="panel-rejected">Rejected <span class="count" id="count-rejected"></span></button>
   </div>
 
@@ -193,6 +202,11 @@
   <div class="tab-panel" role="tabpanel" id="panel-emails" aria-labelledby="tab-emails" hidden>
     <p class="small muted">Nothing sends until you approve it here.</p>
     <div id="emails"></div>
+  </div>
+
+  <div class="tab-panel" role="tabpanel" id="panel-meetings" aria-labelledby="tab-meetings" hidden>
+    <p class="small muted">What the reply agent booked on the sales calendar, and everything it logged to the CRM.</p>
+    <div id="meetings"></div>
   </div>
 
   <div class="tab-panel" role="tabpanel" id="panel-rejected" aria-labelledby="tab-rejected" hidden>
@@ -224,6 +238,8 @@ const ACTION_LABELS = {
   redraft: 'Redrafting the email',
   rejectEmail: 'Rejecting the email',
   send: 'Sending the email',
+  agentReply: 'Running the reply agent',
+  agentHandBack: 'Handing the thread back to the agent',
 };
 
 function showStatus() {
@@ -296,6 +312,12 @@ const ANSWER_LABELS = {
   yes: 'Yes',
   no: 'No',
   unknown: 'Unknown',
+  interested: 'Interested',
+  not_interested: 'Not interested',
+  no_reply: 'No reply',
+  unscheduled: 'Unscheduled',
+  pending_confirmation: 'Pending confirmation',
+  confirmed: 'Confirmed',
 };
 
 function answerText(d) {
@@ -424,17 +446,82 @@ function finishedRow(c) {
       unfinished ? button('Continue', () => act('continueOutreach', { domain: c.domain }), 'sm') : null));
 }
 
+const formatSlot = (iso) => `${new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso))} IST`;
+const formatWhen = (iso) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+
+// The thread's state as the agent holds it, with nothing implied: an empty field shows as empty.
+const agentState = (c) => (c.agent && c.agent.state) || { reply_status: 'no_reply', calendar_checked: false, times_proposed: [], reply_round: 0, meeting_status: 'unscheduled', crm_logged: false, log: [] };
+
+function agentSummary(s) {
+  if (s.escalated) return { text: 'Handed to you', cls: 'flag' };
+  if (s.meeting_status === 'confirmed') return { text: `Meeting booked: ${formatSlot(s.booked_time)}`, cls: 'sent' };
+  if (s.reply_status === 'not_interested') return { text: 'Declined', cls: 'muted' };
+  if (s.outcome === 'booking_failed') return { text: 'Booking failed', cls: 'reject' };
+  if (s.meeting_status === 'pending_confirmation') return { text: 'Times proposed, waiting for a reply', cls: 'muted' };
+  return { text: 'Waiting for a reply', cls: 'muted' };
+}
+
+function agentPanel(c) {
+  const s = agentState(c);
+  const yesNo = (v) => (v ? 'Yes' : 'No');
+  const tile = (label, value) => el('div', { className: 'fact' }, el('div', { className: 'fact-label', textContent: label }), el('div', { className: 'fact-value', textContent: value }));
+  const tiles = el('div', { className: 'facts' },
+    tile('Reply status', ANSWER_LABELS[s.reply_status] || String(s.reply_status).replace(/_/g, ' ')),
+    tile('Calendar checked', yesNo(s.calendar_checked)),
+    tile('Times proposed', s.times_proposed.length ? s.times_proposed.map(formatSlot).join(', ') : 'None yet'),
+    tile('Reply round', String(s.reply_round)),
+    tile('Meeting status', ANSWER_LABELS[s.meeting_status] || String(s.meeting_status).replace(/_/g, ' ')),
+    tile('CRM logged', yesNo(s.crm_logged)));
+
+  const finished = s.meeting_status === 'confirmed' || s.reply_status === 'not_interested' || s.outcome === 'booking_failed';
+  let controls = null;
+  if (s.escalated) {
+    const note = el('input', { placeholder: 'What you did or told them (optional)' });
+    controls = el('div', {},
+      el('div', { className: 'notice small', textContent: `Handed to the Growth Lead: ${s.escalation_reason || 'needs a person'}` }),
+      el('div', { className: 'redraft' }, note, button('Hand back to agent', () => act('agentHandBack', { domain: c.domain, note: note.value }))));
+  } else if (!finished) {
+    const reply = el('textarea', { id: `r-${c.domain}`, className: 'reply-box', placeholder: `What ${c.poc ? c.poc.firstName : 'the prospect'} replied` });
+    controls = el('div', {},
+      el('label', { htmlFor: `r-${c.domain}`, textContent: "Paste the prospect's reply" }),
+      reply,
+      el('div', { className: 'card-actions' }, button('Run reply agent', () => act('agentReply', { domain: c.domain, reply: reply.value }), 'primary')));
+  } else if (s.outcome === 'booking_failed') {
+    controls = el('div', { className: 'notice small', textContent: `The booking failed and the run stopped: ${s.escalation_reason}` });
+  }
+
+  const steps = [...(s.log || [])].reverse().map((e) =>
+    el('li', { className: `small ${e.kind === 'error' ? 'reject' : e.kind === 'decision' || e.kind === 'escalation' ? 'flag' : ''}` }, el('span', { className: 'muted', textContent: `${formatWhen(e.at)} ` }), e.text));
+  return el('div', { className: 'agent' }, tiles, controls, fold(`log-${c.domain}`, `Agent timeline (${steps.length})`, el('ul', { className: 'timeline' }, ...steps)));
+}
+
 function sentRow(c) {
   const e = c.email;
   const who = c.poc ? `Written for ${c.poc.firstName} ${c.poc.lastName}, ${c.poc.title}` : '';
+  const summary = agentSummary(agentState(c));
   return el('div', { className: 'list-row' },
     el('div', {}, title(c), el('div', { className: 'small muted', textContent: who })),
-    el('span', { className: 'small sent', textContent: e.sentAt ? `Sent ${e.sentAt.slice(0, 10)}` : 'Sent' }),
+    el('div', { className: 'right' },
+      el('div', { className: 'small sent', textContent: e.sentAt ? `Sent ${e.sentAt.slice(0, 10)}` : 'Sent' }),
+      el('div', { className: `small ${summary.cls}`, textContent: summary.text })),
+    fold(`agent-${c.domain}`, 'Reply agent', agentPanel(c)),
     fold(`sent-${c.domain}`, 'View email',
       el('div', { className: 'sent-email' },
         el('div', { className: 'small muted', textContent: `Delivered to ${e.sentTo}` }),
         el('strong', { textContent: e.subject }),
         el('div', { className: 'sent-body', textContent: e.body }))));
+}
+
+function meetingsView(state) {
+  const names = Object.fromEntries(Object.values(state.companies).map((c) => [c.domain, c.name]));
+  const upcoming = (state.meetings || []).map((m) =>
+    el('div', { className: 'list-row' }, el('div', {}, el('h3', { textContent: m.title }), el('div', { className: 'small muted', textContent: names[m.domain] || m.domain })), el('div', { className: 'small sent', textContent: formatSlot(m.starts_at) })));
+  const CRM_LABELS = { meeting_booked: 'Meeting booked', not_interested: 'Not interested', escalated: 'Handed to a person' };
+  const crm = (state.crm || []).map((r) =>
+    el('div', { className: 'list-row' },
+      el('div', {}, el('h3', {}, `${names[r.domain] || r.domain} `, el('span', { className: 'muted small', textContent: r.domain })), el('div', { className: 'small muted', textContent: r.details && r.details.reason ? r.details.reason : '' })),
+      el('div', { className: 'right' }, el('div', { className: 'small', textContent: CRM_LABELS[r.event] || r.event }), el('div', { className: 'small muted', textContent: formatWhen(r.created_at) }))));
+  return [...listGroup('Booked meetings', upcoming), ...listGroup('CRM log', crm)];
 }
 
 function fill(id, nodes, empty) {
@@ -456,7 +543,7 @@ const REASON_LABELS = {
 
 const listGroup = (name, rows) => (rows.length ? [el('div', { className: 'card' }, el('div', { className: 'group-title' }, name, el('span', { className: 'count', textContent: rows.length })), ...rows)] : []);
 
-const TABS = ['qualified', 'emails', 'rejected'];
+const TABS = ['qualified', 'emails', 'meetings', 'rejected'];
 
 function showTab(name, focus) {
   for (const t of TABS) {
@@ -502,16 +589,21 @@ function render(state) {
     ...listGroup('Sent', sent),
   ], 'No emails yet. Qualify a company to draft one.');
 
+  fill('meetings', meetingsView(state), 'No meetings or CRM events yet. Paste a reply on a sent email to start the reply agent.');
+
   const toQualify = researched.filter((c) => c.recommendation.verdict === 'qualify').length;
-  const toReview = toReviewCards.length;
+  const handedOver = by((c) => c.status === 'sent' && agentState(c).escalated).length;
+  const toReview = toReviewCards.length + handedOver;
   $('count-qualified').textContent = toQualify;
   $('count-emails').textContent = toReview;
+  $('count-meetings').textContent = (state.meetings || []).length;
   $('count-rejected').textContent = rejects.length + closed.length;
   const waitingOnYou = toQualify + toReview;
   $('bandTitle').textContent = waitingOnYou ? 'Waiting for you' : 'Nothing waiting for you';
   $('bandText').textContent = [
     toQualify && `${toQualify} ${toQualify === 1 ? 'company' : 'companies'} to qualify`,
-    toReview && `${toReview} ${toReview === 1 ? 'email' : 'emails'} to review`,
+    toReviewCards.length && `${toReviewCards.length} ${toReviewCards.length === 1 ? 'email' : 'emails'} to review`,
+    handedOver && `${handedOver} ${handedOver === 1 ? 'thread' : 'threads'} handed to you`,
     `${by((c) => c.status === 'sent').length} sent`,
     `${rejects.length} recommended ${rejects.length === 1 ? 'rejection' : 'rejections'}`,
   ].filter(Boolean).join(', ');
