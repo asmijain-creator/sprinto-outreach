@@ -226,4 +226,4 @@ async function researchCompany(company, onProgress = () => {}) {
   return current;
 }
 
-module.exports = { researchCompany, researchStep, nextQuestion, verifiedDate, findCitation };
+module.exports = { researchCompany, researchStep, nextQuestion, verifiedDate, findCitation, citedSource };

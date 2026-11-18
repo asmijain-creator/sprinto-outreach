@@ -108,7 +108,11 @@
   .agent .fact { background:var(--card); }
   .reply-box { min-height:90px; }
   .timeline { margin:6px 0 0; padding-left:18px; }
-  .timeline li + li { margin-top:4px; }  main { max-width:1040px; margin:0 auto; padding:0 16px 64px; }
+  .timeline li + li { margin-top:4px; }
+  table.checkpoints { font-size:13px; min-width:720px; }
+  table.checkpoints th, table.checkpoints td { padding:6px 10px 6px 0; white-space:normal; }
+  table.checkpoints thead th { font-family:ui-monospace, Consolas, monospace; font-size:12px; color:var(--muted); }
+  table.checkpoints td.changed { background:var(--hot-tint); color:var(--warn); font-weight:600; }  main { max-width:1040px; margin:0 auto; padding:0 16px 64px; }
   h1 { font-size:26px; font-weight:600; margin:0 0 4px; }
   h2 { font-size:20px; font-weight:600; margin:36px 0 4px; color:var(--accent); }
   h3 { font-size:16px; font-weight:600; margin:0; overflow-wrap:anywhere; }
@@ -160,10 +164,10 @@
     <ol class="steps" aria-label="How it works">
       <li>Shortlist</li>
       <li>Research</li>
-      <li>Qualify</li>
       <li>Find PoC</li>
-      <li>Draft</li>
+      <li>Review</li>
       <li>Send</li>
+      <li>Book</li>
     </ol>
   </div>
 
@@ -432,9 +436,27 @@ function emailCard(c) {
       el('aside', { className: 'email-side' },
         block('Written for', el('div', {}, el('strong', { textContent: `${c.poc.firstName} ${c.poc.lastName}` }), `, ${c.poc.title}`),
           el('div', { className: 'small muted', textContent: `${c.poc.reason} (${c.poc.source})` })),
+        pocBlock(c, block),
+        (e.learningsApplied || []).length
+          ? block('Learnings applied', el('ul', {}, ...e.learningsApplied.map((l) => el('li', { className: 'small', textContent: l.lesson }))))
+          : null,
         block('Hook', el('div', {}, `${e.hook} `, hookLink)),
         block('Pain points', pains),
         block('Why this email', el('div', { className: 'small muted', textContent: e.why_this_email })))));
+}
+
+// Research PoC: what web search confirmed about the person, with a link for each update.
+function pocBlock(c, block) {
+  const r = c.pocResearch;
+  if (!r) return null;
+  if (!r.found) return block(`About ${c.poc.firstName}`, el('div', { className: 'small muted', textContent: r.error ? `Research failed: ${r.error}` : 'Nothing confirmed beyond their title.' }));
+  const updates = (r.updates || []).map((u) =>
+    el('li', { className: 'small' }, `${u.text}${u.sourceDate ? ` (${u.sourceDate})` : ''} `,
+      /^https?:\/\//.test(u.url || '') ? el('a', { href: u.url, target: '_blank', rel: 'noopener noreferrer', textContent: 'source' }) : null));
+  return block(`About ${c.poc.firstName}`,
+    r.role ? el('div', { className: 'small', textContent: r.role }) : null,
+    (r.priorities || []).length ? el('div', { className: 'small muted', textContent: `Priorities: ${r.priorities.join(', ')}` }) : null,
+    updates.length ? el('ul', {}, ...updates) : null);
 }
 
 function finishedRow(c) {
@@ -492,15 +514,30 @@ function agentPanel(c) {
 
   const steps = [...(s.log || [])].reverse().map((e) =>
     el('li', { className: `small ${e.kind === 'error' ? 'reject' : e.kind === 'decision' || e.kind === 'escalation' ? 'flag' : ''}` }, el('span', { className: 'muted', textContent: `${formatWhen(e.at)} ` }), e.text));
-  return el('div', { className: 'agent' }, tiles, controls, fold(`log-${c.domain}`, `Agent timeline (${steps.length})`, el('ul', { className: 'timeline' }, ...steps)));
+  return el('div', { className: 'agent' }, tiles, controls,
+    fold(`checkpoints-${c.domain}`, `State at every checkpoint (${(s.checkpoints || []).length})`, checkpointTable(s.checkpoints || [])),
+    fold(`log-${c.domain}`, `Agent timeline (${steps.length})`, el('ul', { className: 'timeline' }, ...steps)));
+}
+
+// The six fields after every step, with what changed highlighted, like the lecture's table.
+function checkpointTable(checkpoints) {
+  if (!checkpoints.length) return el('div', { className: 'small muted', textContent: 'Checkpoints are recorded for threads started from now on.' });
+  const keys = ['reply_status', 'calendar_checked', 'times_proposed', 'reply_round', 'meeting_status', 'crm_logged'];
+  const show = (k, v) => (k === 'times_proposed' ? (v.length ? v.map(formatSlot).join(', ') : 'none') : String(v));
+  const rows = checkpoints.map((cp, i) =>
+    el('tr', {}, el('th', { scope: 'row', textContent: `${i + 1}. ${cp.label}` }),
+      ...keys.map((k) => el('td', { className: i && JSON.stringify(cp[k]) !== JSON.stringify(checkpoints[i - 1][k]) ? 'changed' : '', textContent: show(k, cp[k]) }))));
+  const head = el('thead', {}, el('tr', {}, el('th', { scope: 'col', textContent: 'Checkpoint' }), ...keys.map((k) => el('th', { scope: 'col', textContent: k }))));
+  return el('div', { className: 'table-wrap' }, el('table', { className: 'checkpoints' }, head, el('tbody', {}, ...rows)));
 }
 
 function sentRow(c) {
   const e = c.email;
   const who = c.poc ? `Written for ${c.poc.firstName} ${c.poc.lastName}, ${c.poc.title}` : '';
   const summary = agentSummary(agentState(c));
+  const learned = e.learning && e.learning.captured ? el('div', { className: 'small muted', textContent: `Your edit taught: ${e.learning.lesson}` }) : null;
   return el('div', { className: 'list-row' },
-    el('div', {}, title(c), el('div', { className: 'small muted', textContent: who })),
+    el('div', {}, title(c), el('div', { className: 'small muted', textContent: who }), learned),
     el('div', { className: 'right' },
       el('div', { className: 'small sent', textContent: e.sentAt ? `Sent ${e.sentAt.slice(0, 10)}` : 'Sent' }),
       el('div', { className: `small ${summary.cls}`, textContent: summary.text })),
@@ -510,6 +547,17 @@ function sentRow(c) {
         el('div', { className: 'small muted', textContent: `Delivered to ${e.sentTo}` }),
         el('strong', { textContent: e.subject }),
         el('div', { className: 'sent-body', textContent: e.body }))));
+}
+
+// The feedback loop's store: each lesson captured from an edited draft.
+function learningRows(state) {
+  const names = Object.fromEntries(Object.values(state.companies).map((c) => [c.domain, c.name]));
+  return (state.learnings || []).map((l) => {
+    const changed = ['hook', 'angle', 'cta'].filter((k) => l.changes && l.changes[k] && l.changes[k].changed).map((k) => k.toUpperCase());
+    return el('div', { className: 'list-row' },
+      el('div', {}, el('div', { textContent: l.lesson }), el('div', { className: 'small muted', textContent: `From your edit to ${names[l.domain] || l.domain}${changed.length ? `. Changed: ${changed.join(', ')}` : ''}` })),
+      el('div', { className: 'small muted', textContent: formatWhen(l.created_at) }));
+  });
 }
 
 function meetingsView(state) {
@@ -587,6 +635,7 @@ function render(state) {
     ...(toReviewCards.length ? [el('h3', { className: 'group-head', textContent: `To review (${toReviewCards.length})` }), ...toReviewCards] : []),
     ...listGroup('In progress', inProgress),
     ...listGroup('Sent', sent),
+    ...listGroup('What the drafts have learned from your edits', learningRows(state)),
   ], 'No emails yet. Qualify a company to draft one.');
 
   fill('meetings', meetingsView(state), 'No meetings or CRM events yet. Paste a reply on a sent email to start the reply agent.');

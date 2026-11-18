@@ -31,41 +31,71 @@ Other commands: `node run.js shortlist 10`, `node run.js add a.com b.io`, `node 
 - **Staying awake.** Supabase's free plan pauses databases that go unused. Vercel calls `/api/keepalive` once a day (`crons` in `vercel.json`) to read one row and prevent that. If the site ever shows "fetch failed", open the Supabase project and click Restore.
 - **There is no login.** Anyone with the link can see all the data, including contact names and emails, and can run every action, which uses your API credits and can send emails to `EMAIL_TO`. Share the link only with people you trust.
 
+## The whole workflow
+
+Following *Where We Left Sprinto* (MESA, Term 2):
+
+1. **Define ICP** (`config/icp.js`), then **Shortlist companies** from free sources.
+2. **Per-company loop:** deep research from free sources and web scraping, then **Find PoC and email** with Hunter.io, then **Research PoC** (`src/poc.js`). That's the person's role, stated priorities and recent updates, from web search. Each update keeps its source and date, so it can be the email's hook only if it's under 12 months old.
+3. **Draft email**, then **human review and edit** on the page, then **Send**.
+4. **Feedback loop** (`src/learning.js`), which improves future emails:
+   - **Act:** the system drafts the email.
+   - **Signal:** the difference between that draft and the email you actually sent.
+   - **Capture:** what changed, such as the hook, the angle or the call to action, and a lesson.
+   - **Store:** the before and after pair, in the Supabase table `email_edits`.
+   - **Retrieve:** up to 3 past lessons, from companies that qualified the same way first, then the same industry.
+   - **Apply:** those lessons go into the next draft's prompt.
+
+   The page lists every lesson, and shows which ones each draft applied.
+5. **Everything after Send:** the reply agent below.
+
 ## The reply agent (after "Send")
 
-Once a cold email is sent, the reply agent takes over. It's built on [LangGraph](https://github.com/langchain-ai/langgraphjs), following the five decisions from *Agents as Actors with Tools* (MESA, Term 2, L6). The prospect never receives the email, so on the page you paste what they would reply, under Emails, Sent, Reply agent.
+Once a cold email is sent, the reply agent takes over. It's built on [LangGraph](https://github.com/langchain-ai/langgraphjs), following *Everything After "Send"* and the five decisions from *Agents as Actors with Tools* (MESA, Term 2, L6). The prospect never receives the email, so on the page you paste what they would reply, under Emails, Sent, Reply agent.
 
-**1. Tools and descriptions** (`src/tools.js`). Each tool's description is a field in code that says what it does, when to use it, when not to, and what it returns.
+- **Sequence 1, Send & Wait:**
+  - **Interested:** moves on to Sequence 2.
+  - **Not interested:** ends.
+  - **No reply:** ends.
+
+  The cold email itself names no days or times, and the checks reject one that does.
+- **Sequence 2, Schedule the Call:**
+  1. `check_calendar` gets the Growth Lead's free slots.
+  2. `send_email` replies with specific times.
+  3. What comes back:
+     - **Confirms a time:** `book_meeting` books it and sends the calendar invite, then `update_crm` writes the outcome back.
+     - **Counter-proposes:** loops back to `check_calendar` and new times. A second counter-proposal hands off to the Growth Lead.
+     - **Goes silent:** past the 48-hour follow-up window, it hands off to the Growth Lead, checked by the daily cron.
+
+**1. Tools and descriptions** (`src/tools.js`). Each tool's description is a field in code that says what it does, when to use it, when not to, and what it returns. The `check_calendar` description follows the lecture's worked answer.
 
 | Tool | What it does |
 |---|---|
-| `send_email` | Sends a confirmation, or a hand-off to the Growth Lead. Always to `EMAIL_TO` only. |
-| `check_calendar` | Checks one time on Sprinto's sales calendar: free, busy, or no-calendar-access |
-| `propose_time` | Emails the prospect free times, using `send_email` |
-| `book_meeting` | Books a confirmed time. The calendar refuses double bookings. |
-| `update_crm` | Logs the outcome: meeting booked, not interested, or handed to a person |
+| `send_email` | Proposes times, sends the calendar invite (an `.ics` file), or hands off to the Growth Lead. Always to `EMAIL_TO` only. |
+| `check_calendar` | Checks whether a specific date and time is free on the Growth Lead's calendar: free, busy, or no-calendar-access |
+| `book_meeting` | Creates the meeting. The calendar refuses double bookings. |
+| `update_crm` | Writes the booked meeting back to the CRM |
 
 The calendar and CRM are the Supabase tables `meetings` and `crm_log`. The calendar offers weekdays at 11:00 and 15:00 India time, up to 30 days out.
 
-**2. State schema** (`src/agent.js`). One state object, fixed before the agent runs: `reply_status`, `calendar_checked`, `times_proposed`, `reply_round`, `meeting_status`, `crm_logged`, plus the reply, the times asked for or turned down, and the timeline. It's saved with each company, so every run, and every person, picks up where the last left off.
+**2. State schema** (`src/agent.js`). One state object, fixed before the agent runs: `reply_status`, `calendar_checked`, `times_proposed`, `reply_round`, `meeting_status`, `crm_logged`, plus the reply, the times asked for or turned down, and the timeline. It's saved with each company, so every run, and every person, picks up where the last left off. The six fields are also recorded after every step. The page shows them as *The State Object, At Every Checkpoint*, with each change highlighted.
 
 **3. Edges.** A reply goes to `handle_reply`, where Gemini turns it into fields. The edges then decide what runs next:
-- **Interested:** `check_calendar`, then `propose_time`, then wait for the reply.
-- **Confirms a time:** `check_calendar`, then `book_meeting`, then the confirmation email, then `update_crm`.
-- **Suggests another time:** `reply_round` goes up and the earlier times are ruled out, then back to `check_calendar`. Their time is offered first if it's free. At 2 rounds, `escalate`.
-- **Declines:** `update_crm`.
+- **Interested:** `check_calendar`, then `send_email` with times, then wait.
+- **Confirms a time:** `check_calendar`, then `book_meeting`, then the calendar invite, then `update_crm`.
+- **Counter-proposes:** `reply_round` goes up, `calendar_checked` resets, and the earlier times are ruled out. Then back to `check_calendar`, and their time is offered first if it's free. At 2 rounds, `escalate`.
+- **Not interested:** end.
 - **Unclear, such as a question:** `escalate`.
-- **No reply within 48 hours:** `escalate`, checked by the daily cron.
 
-`escalate` emails the Growth Lead (at `EMAIL_TO`) and logs to the CRM. The Growth Lead can hand the thread back from the page, and the agent resumes from the saved state.
+`escalate` emails the Growth Lead (at `EMAIL_TO`). The Growth Lead can hand the thread back from the page, and the agent resumes from the saved state.
 
-**4. Retry table** (`config/agent.js`). Each failure is transient (a timeout, a rate limit or a server error) or permanent. A transient one is retried up to 3 times.
+**4. Retry table** (`config/agent.js`). Each failure is transient (a timeout, a rate limit or a server error) or permanent. A transient one is retried up to 3 times. `send_email` has two rows, because proposing times matters more than an invite or a note.
 
 | Tool | Transient | Permanent | Why |
 |---|---|---|---|
-| `send_email` | Retry, then skip | Skip | Nothing later depends on it |
+| `send_email` (invite, hand-off) | Retry, then skip | Skip | Nothing later depends on it |
+| `send_email` (propose times) | Retry, then escalate | Escalate | The prospect is waiting, and a person can send times |
 | `check_calendar` | Retry, then escalate | Escalate | Proposals depend on it, and a person can check instead |
-| `propose_time` | Retry, then escalate | Escalate | The prospect is waiting, and a person can send times |
 | `book_meeting` | Retry, then abort | Abort | Nothing can stand in for a booking |
 | `update_crm` | Retry, then escalate | Escalate | A person can log it by hand |
 
@@ -80,6 +110,8 @@ The calendar and CRM are the Supabase tables `meetings` and `crm_log`. The calen
 | `config/icp.js` | The ICP: every qualifier, its sources and its "sufficient when" rule |
 | `src/verdict.js` | The qualification decision, as plain code |
 | `src/shortlist.js`, `src/research.js`, `src/outreach.js` | Find companies, research them, find the PoC, draft and send |
+| `src/poc.js` | Research PoC: role, priorities and recent updates |
+| `src/learning.js` | The feedback loop that learns from your edits |
 | `src/agent.js`, `src/tools.js`, `config/agent.js` | The reply agent: graph, tools and rules |
 | `src/app.js` | The API |
 | `api/` | One Vercel function per API route |

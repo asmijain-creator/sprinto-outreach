@@ -1,6 +1,6 @@
-// The reply agent's five tools. Each description is a real field the agent's
-// prompt is built from, so it follows the four rules: what the tool does, when
-// to use it, when not to, and what it returns.
+// The reply agent's tools. Each description is a real field the agent's prompt is
+// built from, so it follows the four rules: what the tool does, when to use it,
+// when not to, and what it returns.
 const { CALENDAR } = require('../config/agent');
 const { env, db, useSupabase } = require('./lib');
 const { deliver } = require('./outreach');
@@ -34,7 +34,7 @@ function isBookable(date, now) {
   return CALENDAR.workDays.includes(weekday) && hour >= CALENDAR.openHour && endsBy && minute % CALENDAR.slotMinutes === 0;
 }
 
-// The next proposal slots, in order, from the day after `now`.
+// The Growth Lead's next proposal slots, in order, from the day after `now`.
 function upcomingSlots(now, limit = 20) {
   const slots = [];
   for (let day = 1; day <= CALENDAR.horizonDays && slots.length < limit; day++) {
@@ -51,21 +51,71 @@ const signature = () => [env.SENDER_NAME, env.SENDER_TITLE].filter(Boolean).join
 // Every email is addressed in its subject to the person it is written for, but sent only to EMAIL_TO.
 const forPoc = (company, subject) => `To ${company.poc.firstName} ${company.poc.lastName} at ${company.name}: ${subject}`;
 
+// The email that proposes times (Sequence 2, after check_calendar).
+function proposalEmail(company, times, counter) {
+  const intro = counter
+    ? "Thanks for suggesting another time. Here's what's open on our side."
+    : "Thanks for getting back to me. I'd be glad to walk you through how Sprinto would handle this.";
+  const body = [
+    `Hi ${company.poc.firstName},`,
+    '',
+    intro,
+    '',
+    'Would one of these work for a 30-minute call?',
+    ...times.map((t) => `- ${formatSlot(t)}`),
+    '',
+    'Just reply with the one that suits you.',
+    '',
+    signature(),
+  ].join('\n');
+  return { subject: forPoc(company, 'Times for a quick call'), body, key: `${company.domain}-propose-${times.join(',')}` };
+}
+
+const icsTime = (iso) => new Date(iso).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+const icsText = (s) => String(s).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\r?\n/g, '\\n');
+
+// The calendar invite that goes with a booking, as an .ics attachment.
+function inviteEmail(company, time, title) {
+  const end = new Date(new Date(time).getTime() + CALENDAR.slotMinutes * 60 * 1000).toISOString();
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Sprinto outreach//Reply agent//EN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${company.domain}-${icsTime(time)}@sprinto-outreach`,
+    `DTSTAMP:${icsTime(new Date().toISOString())}`,
+    `DTSTART:${icsTime(time)}`,
+    `DTEND:${icsTime(end)}`,
+    `SUMMARY:${icsText(title)}`,
+    `DESCRIPTION:${icsText(`30-minute call with ${company.poc.firstName} ${company.poc.lastName}, ${company.poc.title} at ${company.name}.`)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  const body = [`Hi ${company.poc.firstName},`, '', `Great, you're booked for ${formatSlot(time)}. The calendar invite is attached.`, '', 'Looking forward to speaking with you.', '', signature()].join('\n');
+  return {
+    subject: forPoc(company, `Invitation: ${title}`),
+    body,
+    key: `${company.domain}-invite-${time}`,
+    attachments: [{ filename: 'invite.ics', content: Buffer.from(ics).toString('base64') }],
+  };
+}
+
 const TOOLS = {
   send_email: {
     description:
       'Sends one plain-text email, always to the EMAIL_TO address only, never to the prospect directly. ' +
-      'Use to confirm a booked meeting or to hand a thread to the Growth Lead. ' +
-      'Do not use to propose meeting times, which is what propose_time is for, and do not use to send the first cold email. ' +
+      'Use to reply to the prospect with 2-3 specific free times, to send the calendar invite for a booked meeting, or to hand a thread to the Growth Lead. ' +
+      'Do not use to send the first cold email, and do not use to propose times that check_calendar has not just returned free. ' +
       'Returns: the email id from Resend.',
-    run: async ({ subject, body, key }) => ({ id: (await deliver(subject, body, key)).id }),
+    run: async ({ subject, body, key, attachments }) => ({ id: (await deliver(subject, body, key, attachments)).id }),
   },
 
   check_calendar: {
     description:
-      "Checks whether one specific date and time is free on Sprinto's sales calendar. " +
-      'Use when a prospect is interested and times need proposing, or when a prospect confirms or suggests a time. ' +
-      `Do not use to list all upcoming meetings, and do not use for times more than ${CALENDAR.horizonDays} days out, which aren't bookable yet. ` +
+      "Checks whether a specific date and time is free on the Growth Lead's calendar. " +
+      'Use when a prospect proposes or confirms a meeting time, or when free times are needed to propose. ' +
+      `Do not use to list all upcoming meetings, and do not use for dates more than ${CALENDAR.horizonDays} days out - those aren't bookable yet. ` +
       'Returns: free / busy / no-calendar-access.',
     run: async ({ time, now = new Date() }) => {
       if (!useSupabase()) return { result: 'no-calendar-access' };
@@ -76,36 +126,9 @@ const TOOLS = {
     },
   },
 
-  propose_time: {
-    description:
-      'Emails the prospect a short list of free meeting times. ' +
-      'Use only after check_calendar has returned free for every time being proposed. ' +
-      'Do not use to confirm a booking, and do not use with times the prospect has already turned down. ' +
-      'Returns: the email id and the times that were proposed.',
-    run: async ({ company, times, counter }) => {
-      const intro = counter
-        ? "Thanks for suggesting another time. Here's what's open on our side."
-        : "Thanks for getting back to me. I'd be glad to walk you through how Sprinto would handle this.";
-      const body = [
-        `Hi ${company.poc.firstName},`,
-        '',
-        intro,
-        '',
-        'Would one of these work for a 30-minute call?',
-        ...times.map((t) => `- ${formatSlot(t)}`),
-        '',
-        'Just reply with the one that suits you.',
-        '',
-        signature(),
-      ].join('\n');
-      const { id } = await deliver(forPoc(company, 'Times for a quick call'), body, `${company.domain}-propose-${times.join(',')}`);
-      return { id, times };
-    },
-  },
-
   book_meeting: {
     description:
-      "Books one meeting on Sprinto's sales calendar. " +
+      "Creates one meeting on the Growth Lead's calendar. " +
       'Use only when the prospect has confirmed a specific time and check_calendar has just returned free for it. ' +
       'Do not use for a time the prospect has not confirmed, and do not use to move or cancel a meeting. ' +
       'Returns: the booked meeting, or fails if the slot has been taken.',
@@ -121,9 +144,9 @@ const TOOLS = {
 
   update_crm: {
     description:
-      "Writes one event to the prospect's CRM history. " +
-      'Use once a thread reaches an outcome: a meeting booked, the prospect declined, or the thread was handed to a person. ' +
-      'Do not use to record every message, and do not use before the outcome is known. ' +
+      "Writes the outcome back to the prospect's CRM record. " +
+      'Use once, after a meeting has been booked and its invite sent. ' +
+      'Do not use to record every message, and do not use before the meeting is confirmed. ' +
       'Returns: the id of the logged event.',
     run: async ({ domain, event, details }) => {
       const [row] = await db('crm_log', '', {
@@ -136,4 +159,4 @@ const TOOLS = {
   },
 };
 
-module.exports = { TOOLS, formatSlot, isBookable, upcomingSlots, localParts, atLocal, forPoc, signature };
+module.exports = { TOOLS, formatSlot, isBookable, upcomingSlots, localParts, atLocal, forPoc, signature, proposalEmail, inviteEmail };

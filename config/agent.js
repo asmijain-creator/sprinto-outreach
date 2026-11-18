@@ -1,7 +1,7 @@
 // The reply agent's rules. Like the ICP, these are decided before the agent ever
 // runs and never improvised mid-run.
 
-// Sprinto's sales calendar. Proposals are two slots a day, in India time.
+// The Growth Lead's calendar. Proposals are two slots a day, in India time.
 const CALENDAR = {
   timeZone: 'Asia/Kolkata',
   utcOffset: '+05:30',
@@ -17,7 +17,8 @@ const CALENDAR = {
 
 // Two counter-proposals without a confirmed time hands the thread to a human.
 const MAX_REPLY_ROUNDS = 2;
-// No reply this long after the agent's last email also hands it to a human.
+// The follow-up window: once times are proposed (Sequence 2), no reply this long
+// hands the thread to a human. No reply to the cold email itself just ends Sequence 1.
 const SILENCE_HOURS = 48;
 // Who gets escalations. All emails still go only to EMAIL_TO.
 const ESCALATE_TO = 'Growth Lead';
@@ -27,21 +28,22 @@ const MAX_ATTEMPTS = 3;
 // The retry table: for each tool, what a failure leads to. Every cell comes from
 // two questions: would trying again plausibly help (transient or permanent), and
 // does anything after this step depend on it?
+// send_email appears twice, because the same tool has different stakes depending on the step.
 const RETRY_TABLE = {
   send_email: {
     transient: 'retry_then_skip',
     permanent: 'skip',
-    why: 'Confirmations and notes: nothing later depends on them, so a lost one is logged and skipped.',
+    why: 'Calendar invites and hand-off notes: nothing later depends on them, so a lost one is logged and skipped.',
+  },
+  'send_email (propose times)': {
+    transient: 'retry_then_escalate',
+    permanent: 'escalate',
+    why: 'The prospect is waiting for times, and a person can send them instead.',
   },
   check_calendar: {
     transient: 'retry_then_escalate',
     permanent: 'escalate',
-    why: 'propose_time and book_meeting depend on it, and a person can check the calendar instead.',
-  },
-  propose_time: {
-    transient: 'retry_then_escalate',
-    permanent: 'escalate',
-    why: 'The prospect is waiting for times, and a person can send them instead.',
+    why: 'Proposing times and booking depend on it, and a person can check the calendar instead.',
   },
   book_meeting: {
     transient: 'retry_then_abort',

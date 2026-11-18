@@ -1,24 +1,29 @@
-// Stage 8: the reply agent, built on LangGraph. After the cold email is sent it
-// reads the prospect's reply, checks the calendar, proposes or books a time, logs
-// the outcome to the CRM, and hands the thread to a person when it should.
+// Stage 8: the reply agent, built on LangGraph. It follows "Everything After Send":
+//   Sequence 1, Send & Wait: the cold email went out. Interested moves on to
+//     Sequence 2; not interested or no reply ends the thread.
+//   Sequence 2, Schedule the Call: check_calendar, then send_email with 2-3
+//     specific times. A confirmation is booked (book_meeting, with a calendar
+//     invite) and written back (update_crm). A counter-proposal loops back to
+//     check_calendar. Silence past the follow-up window goes to the Growth Lead.
 //
 // One shared state object holds everything. Each node reads it, does one job and
 // writes back, and the edges decide what runs next from what the node wrote.
 const { Annotation, StateGraph, START, END } = require('@langchain/langgraph');
 const { MAX_REPLY_ROUNDS, SILENCE_HOURS, ESCALATE_TO, MAX_ATTEMPTS, RETRY_TABLE, CALENDAR } = require('../config/agent');
-const { TOOLS, formatSlot, upcomingSlots, atLocal, forPoc, signature } = require('./tools');
+const { TOOLS, formatSlot, upcomingSlots, atLocal, forPoc, proposalEmail, inviteEmail } = require('./tools');
 const { gemini, saveCompany } = require('./lib');
 
 const field = (initial) => Annotation({ reducer: (_, next) => next, default: () => initial });
+const appended = () => Annotation({ reducer: (all, more) => all.concat(more), default: () => [] });
 
 // The schema is fixed before the agent runs: a field that a conversation never
 // needs simply stays empty, so nothing can quietly go missing.
 const State = Annotation.Root({
-  // The six fields from the design.
+  // The six fields from the design. Every tool call reads these and writes back.
   reply_status: field('no_reply'), // no_reply, interested, not_interested
   calendar_checked: field(false),
   times_proposed: field([]),
-  reply_round: field(0), // counter-proposals so far
+  reply_round: field(0), // 0 for the first proposal, then one per counter-proposal
   meeting_status: field('unscheduled'), // unscheduled, pending_confirmation, confirmed
   crm_logged: field(false),
   // What this run was given and what the reply said.
@@ -27,6 +32,7 @@ const State = Annotation.Root({
   intent: field(null), // interested, confirm, counter, decline, unclear
   mode: field(null), // propose, book
   requested_times: field([]),
+  free_times: field([]), // what check_calendar found, until the email goes out
   chosen_time: field(null),
   rejected_times: field([]),
   // How the thread ended up.
@@ -36,7 +42,9 @@ const State = Annotation.Root({
   escalation_reason: field(null),
   last_email_at: field(null),
   route: field(null),
-  log: Annotation({ reducer: (all, entries) => all.concat(entries), default: () => [] }),
+  log: appended(),
+  // The six fields after every step, like the "State Object, At Every Checkpoint" table.
+  checkpoints: appended(),
 });
 
 const SIX_FIELDS = ['reply_status', 'calendar_checked', 'times_proposed', 'reply_round', 'meeting_status', 'crm_logged'];
@@ -46,9 +54,10 @@ const entry = (now, kind, text, extra = {}) => ({ at: now().toISOString(), kind,
 // A failure the retry table treats as worth retrying: timeouts, network errors, rate limits and server errors.
 const isTransient = (e) => !e.status || e.status === 429 || e.status >= 500;
 
-// Runs a tool and applies its row of the retry table when it fails.
-async function useTool(name, input, deps) {
-  const policy = RETRY_TABLE[name];
+// Runs a tool and applies its row of the retry table when it fails. The row is
+// usually the tool's own, but a step can name its own row, like proposing times.
+async function useTool(name, input, deps, row = name) {
+  const policy = RETRY_TABLE[row];
   const entries = [];
   for (let attempt = 1; ; attempt++) {
     try {
@@ -61,7 +70,7 @@ async function useTool(name, input, deps) {
       if (transient && attempt < MAX_ATTEMPTS) continue;
       const rule = transient ? policy.transient : policy.permanent;
       const outcome = rule.includes('_then_') ? rule.split('_then_')[1] : rule;
-      entries.push(entry(deps.now, 'decision', `Retry table for ${name}: ${outcome}. ${policy.why}`, { tool: name }));
+      entries.push(entry(deps.now, 'decision', `Retry table for ${row}: ${outcome}. ${policy.why}`, { tool: name }));
       return { ok: false, outcome, error: e.message, entries };
     }
   }
@@ -105,6 +114,11 @@ async function classifyReply({ state, now }) {
 
 function buildAgent(company, deps) {
   const log = (kind, text, extra) => entry(deps.now, kind, text, extra);
+  // Records the six fields as they stand once this step's update is applied.
+  const checkpoint = (label, s, update) => {
+    const merged = { ...s, ...update };
+    return { ...update, checkpoints: [{ label, at: deps.now().toISOString(), ...Object.fromEntries(SIX_FIELDS.map((k) => [k, merged[k]])) }] };
+  };
 
   async function handleReply(s) {
     const r = await deps.classify({ state: s, now: deps.now });
@@ -114,18 +128,19 @@ function buildAgent(company, deps) {
     if (intent === 'confirm' && !chosen) intent = requested.length ? 'counter' : 'unclear';
     const base = { intent, reply_status: r.reply_status, requested_times: requested, chosen_time: chosen, log: [log('reply', `Prospect replied (${intent}): ${r.summary}`)] };
 
-    if (intent === 'decline') return { ...base, outcome: 'declined', route: 'update_crm' };
-    if (intent === 'unclear') return { ...base, route: 'escalate', escalation_reason: `The reply needs a person: ${r.summary}` };
-    if (intent === 'confirm') return { ...base, mode: 'book', route: 'check_calendar' };
-    if (intent === 'interested') return { ...base, mode: 'propose', route: 'check_calendar' };
+    // Sequence 1 ends here for anyone not interested.
+    if (intent === 'decline') return checkpoint('After prospect replies "not interested" (end)', s, { ...base, outcome: 'declined', route: END });
+    if (intent === 'unclear') return checkpoint('After an unclear reply (hand-off)', s, { ...base, route: 'escalate', escalation_reason: `The reply needs a person: ${r.summary}` });
+    if (intent === 'confirm') return checkpoint('After prospect confirms a time', s, { ...base, mode: 'book', route: 'check_calendar' });
+    if (intent === 'interested') return checkpoint('After prospect replies "interested"', s, { ...base, mode: 'propose', route: 'check_calendar' });
 
     // A counter-proposal: the earlier times are out, and it counts towards the cap.
     const round = s.reply_round + 1;
     const rejected = [...new Set([...s.rejected_times, ...s.times_proposed])];
     if (round >= MAX_REPLY_ROUNDS) {
-      return { ...base, reply_round: round, rejected_times: rejected, route: 'escalate', escalation_reason: `${round} counter-proposals without a confirmed time.` };
+      return checkpoint('If prospect counter-proposes again (hand-off)', s, { ...base, reply_round: round, rejected_times: rejected, route: 'escalate', escalation_reason: `${round} counter-proposals without a confirmed time.` });
     }
-    return { ...base, reply_round: round, rejected_times: rejected, calendar_checked: false, mode: 'propose', route: 'check_calendar' };
+    return checkpoint('If prospect counter-proposes (loop back to check calendar)', s, { ...base, reply_round: round, rejected_times: rejected, calendar_checked: false, mode: 'propose', route: 'check_calendar' });
   }
 
   async function checkCalendar(s) {
@@ -133,7 +148,7 @@ function buildAgent(company, deps) {
       const checked = await useTool('check_calendar', { time: s.chosen_time, now: deps.now() }, deps);
       if (!checked.ok) return onFailure(checked, 'escalate');
       if (checked.value.result === 'no-calendar-access') return { route: 'escalate', escalation_reason: 'No calendar access.', log: checked.entries };
-      if (checked.value.result === 'free') return { calendar_checked: true, route: 'book_meeting', log: checked.entries };
+      if (checked.value.result === 'free') return checkpoint('After check calendar', s, { calendar_checked: true, route: 'book_meeting', log: checked.entries });
 
       // The confirmed time was taken in the meantime: loop back and propose others.
       const round = s.reply_round + 1;
@@ -142,7 +157,7 @@ function buildAgent(company, deps) {
       return { reply_round: round, rejected_times: rejected, mode: 'propose', calendar_checked: false, route: 'check_calendar', log: [...checked.entries, log('decision', 'The confirmed time is no longer free, so new times will be proposed.')] };
     }
 
-    // Propose: the prospect's own suggestions first, then the next regular slots.
+    // Propose: the prospect's own suggestions first, then the Growth Lead's next free slots.
     const candidates = [...new Set([...s.requested_times, ...upcomingSlots(deps.now())])].filter((t) => !s.rejected_times.includes(t));
     const free = [];
     const entries = [];
@@ -155,42 +170,45 @@ function buildAgent(company, deps) {
       if (checked.value.result === 'free') free.push(time);
     }
     if (!free.length) return { route: 'escalate', escalation_reason: `No free times in the next ${CALENDAR.horizonDays} days.`, log: entries };
-    return { calendar_checked: true, times_proposed: free, route: 'propose_time', log: entries };
+    // times_proposed is written when the email actually goes out, as in the checkpoint table.
+    return checkpoint('After check calendar', s, { calendar_checked: true, free_times: free, route: 'propose_time', log: entries });
   }
 
   async function proposeTime(s) {
-    const sent = await useTool('propose_time', { company, times: s.times_proposed, counter: s.reply_round > 0 }, deps);
+    const times = s.free_times;
+    const sent = await useTool('send_email', proposalEmail(company, times, s.reply_round > 0), deps, 'send_email (propose times)');
     if (!sent.ok) return onFailure(sent, 'escalate');
-    return {
+    return checkpoint('After send email, proposing times', s, {
+      times_proposed: times,
       meeting_status: 'pending_confirmation',
       last_email_at: deps.now().toISOString(),
       route: END,
-      log: [...sent.entries, log('email', `Proposed ${s.times_proposed.map(formatSlot).join(' or ')}`)],
-    };
+      log: [...sent.entries, log('email', `Proposed ${times.map(formatSlot).join(' or ')}`)],
+    });
   }
+
+  const meetingTitle = () => `Sprinto x ${company.name}: ${company.poc.firstName} ${company.poc.lastName}`;
 
   async function bookMeeting(s) {
-    const booked = await useTool('book_meeting', { domain: company.domain, time: s.chosen_time, title: `Sprinto x ${company.name}: ${company.poc.firstName} ${company.poc.lastName}` }, deps);
+    const booked = await useTool('book_meeting', { domain: company.domain, time: s.chosen_time, title: meetingTitle() }, deps);
     if (!booked.ok) return onFailure(booked, 'escalate');
-    return { meeting_status: 'confirmed', booked_time: s.chosen_time, outcome: 'booked', route: 'send_confirmation', log: [...booked.entries, log('booking', `Booked ${formatSlot(s.chosen_time)}`)] };
+    return checkpoint('After book meeting', s, { meeting_status: 'confirmed', booked_time: s.chosen_time, outcome: 'booked', route: 'send_invite', log: [...booked.entries, log('booking', `Booked ${formatSlot(s.chosen_time)}`)] });
   }
 
-  async function sendConfirmation(s) {
-    const body = [`Hi ${company.poc.firstName},`, '', `Great, you're booked for ${formatSlot(s.booked_time)}. Looking forward to speaking with you.`, '', signature()].join('\n');
-    const sent = await useTool('send_email', { subject: forPoc(company, 'Confirmed'), body, key: `${company.domain}-confirm-${s.booked_time}` }, deps);
+  // The second half of booking: the calendar invite, sent as an .ics attachment.
+  async function sendInvite(s) {
+    const sent = await useTool('send_email', inviteEmail(company, s.booked_time, meetingTitle()), deps);
     if (!sent.ok) return onFailure(sent, 'update_crm');
-    return { last_email_at: deps.now().toISOString(), route: 'update_crm', log: sent.entries };
+    return { last_email_at: deps.now().toISOString(), route: 'update_crm', log: [...sent.entries, log('email', 'Sent the calendar invite')] };
   }
 
   async function updateCrm(s) {
-    const event = s.outcome === 'booked' ? 'meeting_booked' : 'not_interested';
-    const details = { booked_time: s.booked_time, reply_round: s.reply_round };
-    const logged = await useTool('update_crm', { domain: company.domain, event, details }, deps);
+    const logged = await useTool('update_crm', { domain: company.domain, event: 'meeting_booked', details: { booked_time: s.booked_time, reply_round: s.reply_round } }, deps);
     if (!logged.ok) return onFailure(logged, END);
-    return { crm_logged: true, route: END, log: logged.entries };
+    return checkpoint('After update CRM', s, { crm_logged: true, route: END, log: logged.entries });
   }
 
-  // Hands the thread to a person. The state is kept, so the agent can resume later.
+  // Hands the thread to the Growth Lead. The state is kept, so the agent can resume later.
   async function escalate(s) {
     const reason = s.escalation_reason || 'Needs a person.';
     const body = [
@@ -203,16 +221,9 @@ function buildAgent(company, deps) {
       s.times_proposed.length ? `Times last proposed: ${s.times_proposed.map(formatSlot).join(', ')}` : '',
       '',
       'Open the review page to reply yourself, or hand the thread back to the agent.',
-    ].filter((line) => line !== null).join('\n');
+    ].join('\n');
     const notified = await useTool('send_email', { subject: `[Escalation] ${company.name}: ${reason}`.slice(0, 150), body, key: `${company.domain}-escalate-${s.log.length}` }, deps);
-    const logged = await useTool('update_crm', { domain: company.domain, event: 'escalated', details: { reason } }, deps);
-    return {
-      escalated: true,
-      outcome: 'escalated',
-      crm_logged: logged.ok || s.crm_logged,
-      route: END,
-      log: [...notified.entries, ...logged.entries, log('escalation', `Handed to the ${ESCALATE_TO}: ${reason}`)],
-    };
+    return checkpoint(`After hand-off to ${ESCALATE_TO}`, s, { escalated: true, outcome: 'escalated', route: END, log: [...notified.entries, log('escalation', `Handed to the ${ESCALATE_TO}: ${reason}`)] });
   }
 
   const next = (s) => s.route || END;
@@ -221,15 +232,15 @@ function buildAgent(company, deps) {
     .addNode('check_calendar', checkCalendar)
     .addNode('propose_time', proposeTime)
     .addNode('book_meeting', bookMeeting)
-    .addNode('send_confirmation', sendConfirmation)
+    .addNode('send_invite', sendInvite)
     .addNode('update_crm', updateCrm)
     .addNode('escalate', escalate)
     .addConditionalEdges(START, (s) => (s.trigger === 'silence' ? 'escalate' : 'handle_reply'), ['handle_reply', 'escalate'])
-    .addConditionalEdges('handle_reply', next, ['check_calendar', 'update_crm', 'escalate'])
+    .addConditionalEdges('handle_reply', next, ['check_calendar', 'escalate', END])
     .addConditionalEdges('check_calendar', next, ['check_calendar', 'propose_time', 'book_meeting', 'escalate', END])
     .addConditionalEdges('propose_time', next, ['escalate', END])
-    .addConditionalEdges('book_meeting', next, ['send_confirmation', 'escalate', END])
-    .addConditionalEdges('send_confirmation', next, ['update_crm'])
+    .addConditionalEdges('book_meeting', next, ['send_invite', 'escalate', END])
+    .addConditionalEdges('send_invite', next, ['update_crm'])
     .addConditionalEdges('update_crm', next, ['escalate', END])
     .addConditionalEdges('escalate', next, [END])
     .compile();
@@ -238,22 +249,19 @@ function buildAgent(company, deps) {
 // The state a thread starts with, the moment the cold email is sent.
 function initialAgentState(company) {
   const sentAt = (company.email && company.email.sentAt) || new Date().toISOString();
+  const six = { reply_status: 'no_reply', calendar_checked: false, times_proposed: [], reply_round: 0, meeting_status: 'unscheduled', crm_logged: false };
   return {
-    reply_status: 'no_reply',
-    calendar_checked: false,
-    times_proposed: [],
-    reply_round: 0,
-    meeting_status: 'unscheduled',
-    crm_logged: false,
+    ...six,
     escalated: false,
     last_email_at: sentAt,
     log: [{ at: sentAt, kind: 'email', text: 'Cold email sent' }],
+    checkpoints: [{ label: 'After send email', at: sentAt, ...six }],
   };
 }
 
 const isFinished = (s) => s.meeting_status === 'confirmed' || s.reply_status === 'not_interested' || s.outcome === 'booking_failed';
 
-const STORED = ['reply_status', 'calendar_checked', 'times_proposed', 'reply_round', 'meeting_status', 'crm_logged', 'reply_text', 'intent', 'requested_times', 'chosen_time', 'rejected_times', 'booked_time', 'outcome', 'escalated', 'escalation_reason', 'last_email_at', 'log'];
+const STORED = [...SIX_FIELDS, 'reply_text', 'intent', 'requested_times', 'chosen_time', 'rejected_times', 'booked_time', 'outcome', 'escalated', 'escalation_reason', 'last_email_at', 'log', 'checkpoints'];
 
 // Runs the agent once and saves the state, so the next run, or a person, picks up from here.
 async function runAgent(company, input, deps = {}) {
@@ -262,20 +270,19 @@ async function runAgent(company, input, deps = {}) {
   if (input.trigger !== 'silence' && saved.escalated) throw new Error(`This thread is with the ${ESCALATE_TO}. Hand it back to the agent first.`);
   if (isFinished(saved)) throw new Error('This thread has already finished.');
 
-  const start = input.trigger === 'silence' ? { escalation_reason: `No reply within ${SILENCE_HOURS} hours of the last email.` } : {};
-  const result = await buildAgent(company, full).invoke({ ...saved, mode: null, route: null, ...start, ...input });
+  const start = input.trigger === 'silence' ? { escalation_reason: `No reply within the ${SILENCE_HOURS}-hour follow-up window.` } : {};
+  const result = await buildAgent(company, full).invoke({ ...saved, checkpoints: saved.checkpoints || [], mode: null, route: null, ...start, ...input });
   const state = Object.fromEntries(STORED.map((k) => [k, result[k]]));
   return full.save({ ...company, agent: { state, updatedAt: full.now().toISOString() } });
 }
 
-// Called by the daily check: a thread waiting on the prospect for too long goes to a person.
+// Called by the daily check. Only Sequence 2 has a follow-up window: once times
+// are proposed, silence goes to the Growth Lead. Silence after the cold email just ends Sequence 1.
 async function checkSilence(company, now = new Date(), deps = {}) {
-  // Threads sent before the reply agent existed are left alone until someone starts them.
   if (!company.agent) return null;
   const { state } = company.agent;
-  if (state.escalated || isFinished(state)) return null;
-  const waiting = state.reply_status === 'no_reply' || state.meeting_status === 'pending_confirmation';
-  if (!waiting || now - new Date(state.last_email_at) < SILENCE_HOURS * 60 * 60 * 1000) return null;
+  if (state.escalated || isFinished(state) || state.meeting_status !== 'pending_confirmation') return null;
+  if (now - new Date(state.last_email_at) < SILENCE_HOURS * 60 * 60 * 1000) return null;
   return runAgent(company, { trigger: 'silence' }, { now: () => now, ...deps });
 }
 
@@ -287,7 +294,7 @@ async function handBack(company, note, now = new Date(), save = saveCompany) {
   return save({ ...company, agent: { state: { ...state, escalated: false, reply_round: 0, escalation_reason: null, outcome: null, log }, updatedAt: now.toISOString() } });
 }
 
-// Starts a thread the moment its cold email is sent, so the 48-hour clock runs from then.
+// Starts a thread the moment its cold email is sent.
 const startThread = (company) => ({ ...company, agent: { state: initialAgentState(company), updatedAt: new Date().toISOString() } });
 
 module.exports = { runAgent, checkSilence, handBack, startThread, initialAgentState, isFinished, buildAgent, SIX_FIELDS };

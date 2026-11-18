@@ -8,6 +8,7 @@ const { buildShortlist } = require('./shortlist');
 const { researchStep, nextQuestion } = require('./research');
 const { findPoc, draftEmail, sendEmail } = require('./outreach');
 const { runAgent, checkSilence, handBack, startThread } = require('./agent');
+const { editSignal, captureEdit } = require('./learning');
 
 const PORT = Number(env.PORT || 3000);
 const HOSTED = Boolean(env.VERCEL);
@@ -60,8 +61,18 @@ const ACTIONS = {
   send: async ({ domain, subject, body }) => {
     if (!subject || !body) throw new Error('The email needs a subject and a body.');
     const company = await get(domain);
-    const sent = await sendEmail(await saveCompany({ ...company, email: { ...company.email, subject, body, status: 'approved' } }));
-    if (!sent.agent) await saveCompany(startThread(sent));
+    let sent = await sendEmail(await saveCompany({ ...company, email: { ...company.email, subject, body, status: 'approved' } }));
+    if (!sent.agent) sent = await saveCompany(startThread(sent));
+    // The feedback loop: if you edited the draft, capture what changed for future drafts.
+    // The email has already gone, so a failure here is noted rather than raised.
+    const signal = editSignal(sent.email.draft, { subject, body });
+    if (!signal.changed) return;
+    try {
+      const learned = await captureEdit(sent, sent.email.draft, { subject, body });
+      await saveCompany({ ...sent, email: { ...sent.email, learning: { captured: true, lesson: learned.lesson } } });
+    } catch (e) {
+      await saveCompany({ ...sent, email: { ...sent.email, learning: { captured: false, error: e.message } } });
+    }
   },
   // The prospect never receives the email, so you paste what they would reply.
   agentReply: async ({ domain, reply }) => {
@@ -77,12 +88,13 @@ const ACTIONS = {
 
 // The reply agent's calendar and CRM, for the page. Empty when Supabase isn't set up.
 async function loadAgentRecords() {
-  if (!useSupabase()) return { meetings: [], crm: [] };
-  const [meetings, crm] = await Promise.all([
+  if (!useSupabase()) return { meetings: [], crm: [], learnings: [] };
+  const [meetings, crm, learnings] = await Promise.all([
     db('meetings', '?select=domain,starts_at,title&order=starts_at'),
     db('crm_log', '?select=domain,event,details,created_at&order=created_at.desc&limit=100'),
+    db('email_edits', '?select=id,domain,trigger_code,changes,lesson,created_at&order=created_at.desc&limit=50'),
   ]);
-  return { meetings, crm };
+  return { meetings, crm, learnings };
 }
 
 const readBody = (req) =>
