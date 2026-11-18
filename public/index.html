@@ -5,13 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sprinto Outreach Review</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script>
+  // Hide the animated parts until GSAP plays them in, so nothing flashes. If GSAP
+  // doesn't load, or reduced motion is on, they show as normal.
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('motion-pending');
+    setTimeout(() => document.documentElement.classList.remove('motion-pending'), 2500);
+  }
+</script>
 <style>
   /* Colors and font taken from sprinto.com: plum, orange and warm off-white. */
   :root { --plum:#650a41; --orange:#fd8c25; --hot:#b84f0a; --hot-tint:#fdf0e4; --hot-line:#f6cfa9; --glow:#fbe6d3; --band:#3d0627; --bg:#f6f5f2; --card:#fff; --text:#292226; --muted:#50454c; --line:#e4e1db; --accent:#650a41; --accent-hover:#4d0731; --on-accent:#fff; --tint:#f7ecf2; --good:#1c7c4a; --good-tint:#e7f3ec; --bad:#b3362b; --warn:#a55130; }
   @media (prefers-color-scheme: dark) { :root { --hot:#fdb169; --hot-tint:#3a2a22; --hot-line:#6b4a30; --glow:#33232b; --band:#4a0a30; --bg:#1c1518; --card:#292226; --text:#f6f5f2; --muted:#b8adb3; --line:#43383e; --accent:#f0a8d0; --accent-hover:#f7c6e1; --on-accent:#292226; --tint:#3a2a32; --good:#5cc08d; --good-tint:#1f3329; --bad:#ec7f74; --warn:#fdb169; } }
   * { box-sizing:border-box; }
   [hidden] { display:none !important; }
-  html { scroll-behavior:smooth; }
+  html { scroll-behavior:smooth; overflow-x:clip; }
+  .motion-pending .topbar, .motion-pending .hero, .motion-pending .action-grid, .motion-pending .band, .motion-pending .tabs { visibility:hidden; }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior:auto; } }
   body { margin:0; background:radial-gradient(ellipse 700px 260px at 50% 60px, var(--glow), transparent) no-repeat, var(--bg); color:var(--text); font:15px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif; }
   .topbar { background:var(--card); border-top:3px solid; border-image:linear-gradient(90deg, var(--plum), var(--orange)) 1; border-bottom-width:0; box-shadow:0 1px 0 var(--line); }
@@ -26,15 +37,37 @@
   .hero h1 { font-size:clamp(32px, 6vw, 54px); line-height:1.1; font-weight:700; letter-spacing:-.025em; margin:0 0 14px; }
   .hero h1 em { font-style:normal; color:var(--hot); }
   .hero p.lead { font-size:clamp(16px, 2.2vw, 19px); color:var(--muted); margin:0 auto; max-width:660px; }
-  .steps { list-style:none; display:flex; max-width:720px; margin:28px auto 8px; padding:0; }
-  .steps li { position:relative; flex:1 1 0; min-width:0; padding-top:20px; text-align:center; font-size:12px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
-  .steps li::before { content:""; position:absolute; top:3px; left:50%; width:11px; height:11px; margin-left:-5.5px; border:2px solid var(--muted); border-radius:50%; background:var(--bg); z-index:1; }
-  .steps li:not(:last-child)::after { content:""; position:absolute; top:8px; left:50%; width:100%; height:1px; background:linear-gradient(90deg, var(--accent), var(--orange)); }
+  /* The pipeline: one rail between the first and last step, with a packet that travels along it. */
+  .pipeline { position:relative; max-width:720px; margin:28px auto 8px; }
+  .steps { list-style:none; display:flex; margin:0; padding:0; }
+  .steps li { position:relative; flex:1 1 0; min-width:0; padding-top:22px; text-align:center; font-size:12px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); transition:color .3s; }
+  .steps li::before { content:""; position:absolute; top:3px; left:50%; width:13px; height:13px; margin-left:-6.5px; border:2px solid var(--muted); border-radius:50%; background:var(--bg); z-index:1; transition:background .3s, border-color .3s, transform .3s, box-shadow .3s; }
+  .steps li.lit { color:var(--text); }
+  .steps li.lit::before { background:var(--accent); border-color:var(--accent); transform:scale(1.15); box-shadow:0 0 0 5px var(--tint); }
+  .steps li:last-child.lit::before { background:var(--orange); border-color:var(--orange); }
+  .rail { position:absolute; top:9px; left:calc(100% / 12); right:calc(100% / 12); height:2px; border-radius:2px; background:var(--line); }
+  .rail-fill { position:absolute; inset:0; border-radius:2px; background:linear-gradient(90deg, var(--accent), var(--orange)); }
+  .packet { position:absolute; top:-6px; left:-7px; width:14px; height:14px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff 0 18%, var(--orange) 40%, var(--plum) 100%); box-shadow:0 0 0 4px rgba(253,140,37,.18), 0 0 18px rgba(253,140,37,.55); opacity:0; z-index:2; pointer-events:none; }
   @media (max-width:560px) { .steps li { font-size:10px; letter-spacing:0; } }
-  .steps li:first-child::before { border-color:var(--accent); }
-  .steps li:last-child::before { border-color:var(--orange); }
+
+  /* Signal chips that drift around the headline: the facts the research looks for. */
+  .hero { position:relative; }
+  .signals { position:absolute; inset:0; pointer-events:none; }
+  .chip { position:absolute; display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:100px; background:var(--card); border:1px solid var(--line); box-shadow:0 8px 24px rgba(41,34,38,.08); font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; }
+  .chip i { width:8px; height:8px; border-radius:50%; background:var(--orange); }
+  .chip.plum i { background:var(--accent); }
+  .chip.good i { background:var(--good); }
+  @media (max-width:1180px) { .signals { display:none; } }
+
+  /* Hero headline words are wrapped for a masked reveal. */
+  .w { display:inline-block; overflow:hidden; vertical-align:top; padding-bottom:.1em; margin-bottom:-.1em; }
+  .w > span { display:inline-block; }
   .action-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-top:24px; }
-  .action-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; align-items:flex-start; }
+  .action-card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; display:flex; flex-direction:column; align-items:flex-start; transition:transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, border-color .35s; }
+  .action-card:hover { transform:translateY(-4px); box-shadow:0 18px 40px rgba(101,10,65,.12); border-color:var(--hot-line); }
+  .action-card:hover .icon-box { transform:rotate(-6deg) scale(1.06); }
+  .icon-box { transition:transform .35s cubic-bezier(.2,.8,.2,1); }
+  @media (prefers-reduced-motion: reduce) { .action-card, .action-card:hover, .action-card:hover .icon-box { transform:none; transition:none; } }
   .icon-box { width:44px; height:44px; border-radius:10px; display:grid; place-items:center; color:#fff; margin-bottom:16px; }
   .icon-box.orange { background:#e8701a; }
   .icon-box.plum { background:var(--plum); }
@@ -43,12 +76,23 @@
   button.link { border:0; background:none; padding:0; color:var(--hot); font-weight:600; font-size:15px; }
   button.link:hover:not(:disabled) { background:none; text-decoration:underline; }
   button.link:disabled { color:var(--muted); opacity:.7; }
-  .band { margin-top:24px; padding:22px 24px; border-radius:16px; background:linear-gradient(100deg, var(--band), var(--plum)); color:#fff; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; }
+  .band { position:relative; overflow:hidden; margin-top:24px; padding:22px 24px; border-radius:16px; background:linear-gradient(100deg, var(--band), var(--plum)); color:#fff; display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; }
+  .band > * { position:relative; }
+  .band .sheen { position:absolute; top:0; bottom:0; left:-40%; width:40%; background:linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent); pointer-events:none; }
+  .band b.num { font-weight:700; color:#fff; font-variant-numeric:tabular-nums; }
+  /* The status pill pulses while a job runs. */
+  .status:not(:empty)::before { content:""; display:inline-block; width:8px; height:8px; margin-right:8px; border-radius:50%; background:var(--orange); vertical-align:middle; animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow:0 0 0 0 rgba(253,140,37,.55); } 50% { box-shadow:0 0 0 6px rgba(253,140,37,0); } }
+  @media (prefers-reduced-motion: reduce) { .status:not(:empty)::before { animation:none; } }
+  .burst { position:fixed; width:7px; height:7px; border-radius:2px; pointer-events:none; z-index:20; }
   .band strong { display:block; font-size:18px; font-weight:600; }
   .band span { color:#f0dce7; font-size:14px; }
   .band a { flex:none; padding:9px 20px; border-radius:100px; background:var(--orange); color:#2a1405; font-weight:600; text-decoration:none; }
   .band a:hover { background:#ffa04d; }
-  .tabs { display:flex; gap:4px; margin-top:32px; border-bottom:1px solid var(--line); scroll-margin-top:16px; }
+  .tabs { position:relative; display:flex; gap:4px; margin-top:32px; border-bottom:1px solid var(--line); scroll-margin-top:16px; }
+  /* The sliding underline. Without it, the selected tab keeps its own orange underline. */
+  .tab-ink { position:absolute; left:0; bottom:-1px; height:3px; width:0; border-radius:3px 3px 0 0; background:linear-gradient(90deg, var(--accent), var(--orange)); pointer-events:none; }
+  .tabs.has-ink button.tab[aria-selected="true"] { border-bottom-color:transparent; }
   button.tab { flex:0 1 auto; padding:10px 16px; border:0; border-bottom:3px solid transparent; border-radius:8px 8px 0 0; background:none; color:var(--muted); font-size:16px; font-weight:600; margin-bottom:-1px; white-space:nowrap; }
   button.tab:hover:not(:disabled) { background:var(--tint); color:var(--accent); }
   button.tab[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--orange); }
@@ -159,27 +203,38 @@
   <div class="status small" id="status" role="status"></div>
 
   <div class="hero">
+    <div class="signals" aria-hidden="true">
+      <span class="chip" style="left:-150px; top:8px"><i></i>SOC 2 in progress</span>
+      <span class="chip plum" style="left:-185px; top:110px"><i></i>Series B</span>
+      <span class="chip" style="left:-120px; top:205px"><i></i>Hiring a GRC lead</span>
+      <span class="chip plum" style="right:-160px; top:20px"><i></i>Enterprise tier</span>
+      <span class="chip good" style="right:-185px; top:120px"><i></i>Reply: interested</span>
+      <span class="chip good" style="right:-130px; top:215px"><i></i>Meeting booked</span>
+    </div>
     <h1>Reach the right SaaS teams <em>with a real reason to talk.</em></h1>
     <p class="lead">Every company is checked against Sprinto's ICP. Each answer comes with its source, and nothing sends until you approve it.</p>
-    <ol class="steps" aria-label="How it works">
-      <li>Shortlist</li>
-      <li>Research</li>
-      <li>Find PoC</li>
-      <li>Review</li>
-      <li>Send</li>
-      <li>Book</li>
-    </ol>
+    <div class="pipeline">
+      <div class="rail" aria-hidden="true"><div class="rail-fill"></div><div class="packet"></div></div>
+      <ol class="steps" aria-label="How it works">
+        <li>Shortlist</li>
+        <li>Research</li>
+        <li>Find PoC</li>
+        <li>Review</li>
+        <li>Send</li>
+        <li>Book</li>
+      </ol>
+    </div>
   </div>
 
   <div class="action-grid">
     <div class="action-card">
-      <div class="icon-box orange"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg></div>
+      <div class="icon-box orange"><svg class="icon-search" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.500-3.500"/></svg></div>
       <h2>Find companies</h2>
       <p>Search free sources for SaaS teams that may need a compliance audit soon.</p>
       <button id="shortlistBtn" class="link">Find 10 companies &rarr;</button>
     </div>
     <div class="action-card">
-      <div class="icon-box plum"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 17h6"/></svg></div>
+      <div class="icon-box plum"><svg class="icon-doc" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path class="doc-line" d="M10 13h6"/><path class="doc-line" d="M10 17h6"/></svg></div>
       <h2>Research companies</h2>
       <p id="shortlisted"></p>
       <button id="researchBtn" class="link">Research shortlisted &rarr;</button>
@@ -187,11 +242,13 @@
   </div>
 
   <div class="band">
+    <span class="sheen" aria-hidden="true"></span>
     <div><strong id="bandTitle"></strong><span id="bandText"></span></div>
     <a id="bandLink" hidden>Review now</a>
   </div>
 
   <div class="tabs" id="tabs" role="tablist" aria-label="Review stages">
+    <span class="tab-ink" aria-hidden="true"></span>
     <button class="tab" role="tab" id="tab-qualified" aria-controls="panel-qualified">Qualified <span class="count" id="count-qualified"></span></button>
     <button class="tab" role="tab" id="tab-emails" aria-controls="panel-emails">Emails <span class="count" id="count-emails"></span></button>
     <button class="tab" role="tab" id="tab-meetings" aria-controls="panel-meetings">Meetings <span class="count" id="count-meetings"></span></button>
@@ -221,10 +278,209 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...kids) => {
-  const n = Object.assign(document.createElement(tag), props);
+  const { dataset, ...rest } = props;
+  const n = Object.assign(document.createElement(tag), rest);
+  if (dataset) Object.assign(n.dataset, dataset);
   n.append(...kids.filter((k) => k !== null && k !== undefined));
   return n;
 };
+
+// Motion, with GSAP. The page works and shows everything without it, and nothing
+// moves for people whose system asks for reduced motion.
+const motion = (() => {
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const on = () => Boolean(window.gsap) && !reduced();
+  const seen = new Set();
+  const figures = {};
+  const booked = new Map();
+  let triggers = [];
+  let pipeline = null;
+  let started = false;
+
+  const reveal = () => document.documentElement.classList.remove('motion-pending');
+
+  // Wraps each word of the headline, keeping the orange <em>, for a masked rise.
+  function splitWords(node) {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === Node.ELEMENT_NODE) { splitWords(child); continue; }
+      if (child.nodeType !== Node.TEXT_NODE || !child.textContent.trim()) continue;
+      const frag = document.createDocumentFragment();
+      child.textContent.split(/(\s+)/).forEach((part) => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) return frag.append(part);
+        const w = document.createElement('span');
+        w.className = 'w';
+        w.append(Object.assign(document.createElement('span'), { textContent: part }));
+        frag.append(w);
+      });
+      child.replaceWith(frag);
+    }
+  }
+
+  // The motion graphic: a packet travels the pipeline, lighting each step as it passes.
+  function buildPipeline() {
+    if (pipeline) pipeline.kill();
+    const rail = document.querySelector('.rail');
+    const packet = document.querySelector('.packet');
+    const steps = [...document.querySelectorAll('.steps li')];
+    const last = steps.length - 1;
+    const light = (i) => steps.forEach((s, j) => s.classList.toggle('lit', j <= i));
+    gsap.set(packet, { x: 0, opacity: 0 });
+    pipeline = gsap.timeline({ repeat: -1, repeatDelay: 1.4, defaults: { ease: 'power2.inOut' } });
+    pipeline.to(packet, { opacity: 1, duration: 0.3 }).call(() => light(0));
+    for (let i = 1; i <= last; i++) {
+      pipeline
+        .to(packet, { x: () => (rail.offsetWidth * i) / last, duration: 0.75 }, '+=0.25')
+        .call(() => light(i))
+        .to(packet, { scale: 1.5, duration: 0.15, yoyo: true, repeat: 1, ease: 'power1.out' });
+    }
+    pipeline.to(packet, { opacity: 0, duration: 0.4 }, '+=0.8').call(() => light(-1));
+  }
+
+  function intro() {
+    splitWords(document.querySelector('.hero h1'));
+    reveal();
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out', duration: 0.8 } });
+    tl.from('.topbar', { y: -16, autoAlpha: 0, duration: 0.6 })
+      .from('.hero h1 .w > span', { yPercent: 110, stagger: 0.045, duration: 0.9, ease: 'expo.out' }, '-=0.3')
+      .from('.hero .lead', { y: 14, autoAlpha: 0 }, '-=0.65')
+      .from('.rail-fill', { scaleX: 0, transformOrigin: 'left center', duration: 1.1, ease: 'power2.inOut' }, '-=0.5')
+      .from('.steps li', { y: 10, autoAlpha: 0, stagger: 0.07, duration: 0.5 }, '<0.1')
+      .from('.chip', { scale: 0.6, autoAlpha: 0, stagger: 0.08, duration: 0.6, ease: 'back.out(1.8)' }, '<')
+      .from('.action-card', { y: 28, autoAlpha: 0, stagger: 0.1 }, '-=0.7')
+      .from('.band', { y: 20, autoAlpha: 0 }, '-=0.55')
+      .from('.tabs', { y: 10, autoAlpha: 0, duration: 0.5 }, '-=0.45')
+      .add(buildPipeline);
+
+    // Ambient motion: chips drift, icons idle, the band catches the light.
+    gsap.utils.toArray('.chip').forEach((chip, i) => {
+      gsap.to(chip, { y: i % 2 ? 10 : -10, rotation: i % 2 ? 1.5 : -1.5, duration: 3 + (i % 3), ease: 'sine.inOut', yoyo: true, repeat: -1, delay: i * 0.3 });
+    });
+    gsap.to('.icon-search', { x: 2, y: -1, rotation: 10, transformOrigin: '50% 50%', duration: 1.4, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+    gsap.fromTo('.doc-line', { strokeDasharray: 6, strokeDashoffset: 6 }, { strokeDashoffset: 0, duration: 0.7, stagger: 0.35, ease: 'power1.inOut', repeat: -1, repeatDelay: 1.6 });
+    gsap.fromTo('.band .sheen', { xPercent: 0 }, { xPercent: 360, duration: 2.2, ease: 'power2.inOut', repeat: -1, repeatDelay: 4 });
+  }
+
+  // The tab underline glides to the selected tab.
+  function moveInk(instant) {
+    const tabs = $('tabs');
+    const ink = tabs.querySelector('.tab-ink');
+    const active = tabs.querySelector('[aria-selected="true"]');
+    if (!ink || !active) return;
+    tabs.classList.add('has-ink');
+    const to = { x: active.offsetLeft, width: active.offsetWidth };
+    if (on() && !instant) gsap.to(ink, { ...to, duration: 0.45, ease: 'power3.out' });
+    else if (window.gsap) gsap.set(ink, to);
+    else Object.assign(ink.style, { transform: `translateX(${to.x}px)`, width: `${to.width}px` });
+  }
+
+  // Cards and rows rise in the first time they appear, as they scroll into view.
+  function revealNew(root) {
+    if (!on()) return;
+    const items = [...root.querySelectorAll('.list-row, .card, .group-head, .empty')].filter((n) => !n.querySelector('.list-row'));
+    const fresh = items.filter((n) => {
+      const key = `${n.className}|${(n.querySelector('h3, .group-title, div') || n).textContent.slice(0, 80)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (!fresh.length) return;
+    gsap.set(fresh, { y: 18, autoAlpha: 0 });
+    if (window.ScrollTrigger) {
+      triggers.push(...ScrollTrigger.batch(fresh, { once: true, start: 'top 95%', onEnter: (batch) => gsap.to(batch, { y: 0, autoAlpha: 1, stagger: 0.05, duration: 0.55, ease: 'power3.out', overwrite: true }) }));
+      ScrollTrigger.refresh();
+    } else {
+      gsap.to(fresh, { y: 0, autoAlpha: 1, stagger: 0.05, duration: 0.55, ease: 'power3.out' });
+    }
+  }
+
+  // New checkpoint rows slide in with a flash, so you see what the agent just did.
+  function revealCheckpoints() {
+    const rows = [...document.querySelectorAll('table.checkpoints tr[data-cp]')].filter((r) => !seen.has(`cp|${r.dataset.cp}`));
+    rows.forEach((r) => seen.add(`cp|${r.dataset.cp}`));
+    if (!on() || !started || !rows.length) return;
+    gsap.from(rows, { x: -14, autoAlpha: 0, stagger: 0.08, duration: 0.5, ease: 'power3.out' });
+    gsap.fromTo(rows, { backgroundColor: 'rgba(253,140,37,.22)' }, { backgroundColor: 'rgba(253,140,37,0)', duration: 1.6, stagger: 0.08, delay: 0.3, clearProps: 'backgroundColor' });
+  }
+
+  // Figures in the band count up from their last value.
+  function countFigures() {
+    document.querySelectorAll('#bandText b.num').forEach((b) => {
+      const to = Number(b.textContent);
+      const from = figures[b.dataset.key] === undefined ? 0 : figures[b.dataset.key];
+      figures[b.dataset.key] = to;
+      if (!on() || from === to) return;
+      const counter = { v: from };
+      b.textContent = from;
+      gsap.to(counter, { v: to, duration: 1.1, ease: 'power2.out', onUpdate: () => { b.textContent = Math.round(counter.v); } });
+    });
+  }
+
+  // A small burst when a meeting is booked while you watch.
+  function burst(target) {
+    const box = target.getBoundingClientRect();
+    const colors = ['#650a41', '#fd8c25', '#1c7c4a', '#f0a8d0'];
+    for (let i = 0; i < 22; i++) {
+      const dot = el('span', { className: 'burst' });
+      dot.style.background = colors[i % colors.length];
+      dot.style.left = `${box.left + box.width / 2}px`;
+      dot.style.top = `${box.top + box.height / 2}px`;
+      document.body.append(dot);
+      const angle = (Math.PI * 2 * i) / 22;
+      const dist = 40 + Math.random() * 50;
+      gsap.timeline({ onComplete: () => dot.remove() })
+        .to(dot, { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist, rotation: Math.random() * 360, duration: 0.6, ease: 'power3.out' })
+        .to(dot, { y: '+=40', autoAlpha: 0, duration: 0.6, ease: 'power1.in' });
+    }
+  }
+
+  function celebrateBookings(state) {
+    for (const c of Object.values(state.companies)) {
+      const s = c.agent && c.agent.state;
+      const isBooked = Boolean(s && s.meeting_status === 'confirmed');
+      const was = booked.get(c.domain);
+      booked.set(c.domain, isBooked);
+      if (!on() || !started || was === undefined || was || !isBooked) continue;
+      const row = [...document.querySelectorAll('#emails .list-row')].find((r) => r.textContent.includes(c.domain));
+      if (row) burst(row.querySelector('.right') || row);
+    }
+  }
+
+  function init() {
+    if (!on()) { reveal(); moveInk(true); return; }
+    gsap.registerPlugin(window.ScrollTrigger);
+    intro();
+    moveInk(true);
+    started = true;
+    let resize;
+    window.addEventListener('resize', () => {
+      clearTimeout(resize);
+      resize = setTimeout(() => { moveInk(true); if (pipeline) buildPipeline(); }, 150);
+    });
+  }
+
+  return {
+    init,
+    onTab: (name) => {
+      moveInk(false);
+      const panel = $(`panel-${name}`);
+      if (panel && on() && started) gsap.from(panel.querySelector(':scope > p'), { y: 8, autoAlpha: 0, duration: 0.4, ease: 'power2.out' });
+      if (panel) revealNew(panel);
+    },
+    afterRender: (state) => {
+      triggers.forEach((t) => t.kill());
+      triggers = [];
+      const panel = document.querySelector('.tab-panel:not([hidden])');
+      if (panel) revealNew(panel);
+      revealCheckpoints();
+      countFigures();
+      celebrateBookings(state);
+      moveInk(true);
+    },
+    statusIn: () => { if (on()) gsap.from('#status', { y: -10, autoAlpha: 0, duration: 0.35, ease: 'power2.out' }); },
+  };
+})();
+document.addEventListener('DOMContentLoaded', motion.init);
 const edits = {};
 let lastState = '';
 
@@ -247,9 +503,11 @@ const ACTION_LABELS = {
 };
 
 function showStatus() {
+  const wasEmpty = !$('status').textContent;
   const line = busy ? `Working: ${busy}${queued ? ` (${queued} more queued)` : ''}. Keep this tab open.` : '';
   $('status').textContent = line;
   if (lastError) $('status').append(el('div', { className: 'reject', textContent: lastError }));
+  if (wasEmpty && $('status').textContent) motion.statusIn();
 }
 
 function enqueue(label, fn) {
@@ -525,7 +783,7 @@ function checkpointTable(checkpoints) {
   const keys = ['reply_status', 'calendar_checked', 'times_proposed', 'reply_round', 'meeting_status', 'crm_logged'];
   const show = (k, v) => (k === 'times_proposed' ? (v.length ? v.map(formatSlot).join(', ') : 'none') : String(v));
   const rows = checkpoints.map((cp, i) =>
-    el('tr', {}, el('th', { scope: 'row', textContent: `${i + 1}. ${cp.label}` }),
+    el('tr', { dataset: { cp: `${cp.at}-${i}` } }, el('th', { scope: 'row', textContent: `${i + 1}. ${cp.label}` }),
       ...keys.map((k) => el('td', { className: i && JSON.stringify(cp[k]) !== JSON.stringify(checkpoints[i - 1][k]) ? 'changed' : '', textContent: show(k, cp[k]) }))));
   const head = el('thead', {}, el('tr', {}, el('th', { scope: 'col', textContent: 'Checkpoint' }), ...keys.map((k) => el('th', { scope: 'col', textContent: k }))));
   return el('div', { className: 'table-wrap' }, el('table', { className: 'checkpoints' }, head, el('tbody', {}, ...rows)));
@@ -601,6 +859,7 @@ function showTab(name, focus) {
     $(`panel-${t}`).hidden = !on;
   }
   if (focus) $(`tab-${name}`).focus();
+  motion.onTab(name);
 }
 
 const tabFromHash = () => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : TABS[0]);
@@ -649,15 +908,24 @@ function render(state) {
   $('count-rejected').textContent = rejects.length + closed.length;
   const waitingOnYou = toQualify + toReview;
   $('bandTitle').textContent = waitingOnYou ? 'Waiting for you' : 'Nothing waiting for you';
-  $('bandText').textContent = [
-    toQualify && `${toQualify} ${toQualify === 1 ? 'company' : 'companies'} to qualify`,
-    toReviewCards.length && `${toReviewCards.length} ${toReviewCards.length === 1 ? 'email' : 'emails'} to review`,
-    handedOver && `${handedOver} ${handedOver === 1 ? 'thread' : 'threads'} handed to you`,
-    `${by((c) => c.status === 'sent').length} sent`,
-    `${rejects.length} recommended ${rejects.length === 1 ? 'rejection' : 'rejections'}`,
-  ].filter(Boolean).join(', ');
+  // Each figure is its own element, so it can count up when it changes.
+  const sentCount = by((c) => c.status === 'sent').length;
+  const figures = [
+    toQualify && [`qualify`, toQualify, toQualify === 1 ? 'company to qualify' : 'companies to qualify'],
+    toReviewCards.length && ['review', toReviewCards.length, toReviewCards.length === 1 ? 'email to review' : 'emails to review'],
+    handedOver && ['handed', handedOver, handedOver === 1 ? 'thread handed to you' : 'threads handed to you'],
+    ['sent', sentCount, 'sent'],
+    ['rejections', rejects.length, rejects.length === 1 ? 'recommended rejection' : 'recommended rejections'],
+  ].filter(Boolean);
+  $('bandText').replaceChildren(...figures.flatMap(([key, n, words], i) => [
+    i ? ', ' : '',
+    el('b', { className: 'num', textContent: n, dataset: {} }),
+    ` ${words}`,
+  ]));
+  [...$('bandText').querySelectorAll('b.num')].forEach((b, i) => { b.dataset.key = figures[i][0]; });
   $('bandLink').hidden = !waitingOnYou;
   $('bandLink').href = toQualify ? '#qualified' : '#emails';
+  motion.afterRender(state);
 }
 
 async function poll() {
